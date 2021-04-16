@@ -10,7 +10,7 @@ env:
 
 jobs:
   # Do not run on master for bors auto merge.
-  if: ${{ !contains(github.event.commits[0].message, "Auto merge") && github.event.ref == "refs/heads/master" }}
+  if: ${{ !contains(github.event.commits[0].message, "Auto merge") && github.event.ref == 'refs/heads/master' }}
   Build:
     runs-on: ${{ matrix.os }}
     strategy:
