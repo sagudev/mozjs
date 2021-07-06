@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#![allow(deref_nullptr)] // See https://github.com/rust-lang/rust-bindgen/issues/1651.
 #[allow(unused_extern_crates)]
 extern crate encoding_c;
 #[allow(unused_extern_crates)]

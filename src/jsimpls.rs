@@ -56,7 +56,13 @@ impl Default for jsid {
 
 impl Default for JS::PropertyDescriptor {
     fn default() -> Self {
-        JS::PropertyDescriptor { getter_: ptr::null_mut(), setter_: ptr::null_mut(), value_: UndefinedValue(), _bitfield_align_1: Default::default(), _bitfield_1: Default::default() }
+        JS::PropertyDescriptor {
+            getter_: ptr::null_mut(),
+            setter_: ptr::null_mut(),
+            value_: UndefinedValue(),
+            _bitfield_align_1: Default::default(),
+            _bitfield_1: Default::default(),
+        }
     }
 }
 
