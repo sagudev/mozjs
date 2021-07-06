@@ -38,26 +38,26 @@ diff --git a/js/src/builtin/TestingFunctions.cpp b/js/src/builtin/TestingFunctio
 index 98f12139e..ae2cfe266 100644
 --- a/js/src/builtin/TestingFunctions.cpp
 +++ b/js/src/builtin/TestingFunctions.cpp
-@@ -5544,7 +5544,9 @@ static bool GetTimeZone(JSContext* cx, unsigned argc, Value* vp) {
+@@ -6452,7 +6452,9 @@ static bool GetTimeZone(JSContext* cx, unsigned argc, Value* vp) {
    auto getTimeZone = [](std::time_t* now) -> const char* {
      std::tm local{};
- #if defined(_WIN32)
+ #  if defined(_WIN32)
 +#ifndef JS_ENABLE_UWP
      _tzset();
 +#endif
      if (localtime_s(&local, now) == 0) {
        return _tzname[local.tm_isdst > 0];
      }
-@@ -5639,7 +5641,9 @@ static bool SetTimeZone(JSContext* cx, unsigned argc, Value* vp) {
+@@ -6548,7 +6550,9 @@ static bool SetTimeZone(JSContext* cx, unsigned argc, Value* vp) {
    }
  
- #if defined(_WIN32)
+ #  if defined(_WIN32)
 +#ifndef JS_ENABLE_UWP
    _tzset();
 +#endif
- #else
+ #  else
    tzset();
- #endif /* _WIN32 */
+ #  endif /* _WIN32 */
 diff --git a/js/src/ds/MemoryProtectionExceptionHandler.cpp b/js/src/ds/MemoryProtectionExceptionHandler.cpp
 index 3c4eb00c3..010316ff9 100644
 --- a/js/src/ds/MemoryProtectionExceptionHandler.cpp
@@ -222,9 +222,9 @@ diff --git a/js/src/js-config.h.in b/js/src/js-config.h.in
 index b54f1bc2c..bcea2070d 100644
 --- a/js/src/js-config.h.in
 +++ b/js/src/js-config.h.in
-@@ -58,6 +58,9 @@
- /* Define to 1 if SpiderMonkey is in PUNBOX64 mode. */
- #undef JS_PUNBOX64
+@@ -70,6 +70,9 @@
+ #undef ENABLE_WASM_GC
+ #undef ENABLE_WASM_SIMD
  
 +/* Define to 1 if SpiderMonkey is built in a UWP environment. */
 +#undef JS_ENABLE_UWP
@@ -449,7 +449,7 @@ diff --git a/mozglue/misc/StackWalk.cpp b/mozglue/misc/StackWalk.cpp
 index 24868ae5d..c6166b6a6 100644
 --- a/mozglue/misc/StackWalk.cpp
 +++ b/mozglue/misc/StackWalk.cpp
-@@ -77,9 +77,11 @@ extern MOZ_EXPORT void* __libc_stack_end;  // from ld-linux.so
+@@ -104,9 +104,11 @@ class FrameSkipper {
  // We need a way to know if we are building for WXP (or later), as if we are, we
  // need to use the newer 64-bit APIs. API_VERSION_NUMBER seems to fit the bill.
  // A value of 9 indicates we want to use the new APIs.
@@ -459,26 +459,42 @@ index 24868ae5d..c6166b6a6 100644
  #  endif
 +#endif
  
- struct WalkStackData {
-   // Are we walking the stack of the calling thread? Note that we need to avoid
-@@ -181,6 +183,9 @@ static void InitializeDbgHelpCriticalSection() {
+ CRITICAL_SECTION gDbgHelpCS;
+ 
+@@ -188,6 +190,7 @@ static void InitializeDbgHelpCriticalSection() {
+   initialized = true;
  }
  
- static void WalkStackMain64(struct WalkStackData* aData) {
++#ifndef JS_ENABLE_UWP
+ // Wrapper around a reference to a CONTEXT, to simplify access to main
+ // platform-specific execution registers.
+ // It also avoids using CONTEXT* nullable pointers.
+@@ -236,6 +239,7 @@ class CONTEXTGenericAccessors {
+  private:
+   CONTEXT& mCONTEXT;
+ };
++#endif
+ 
+ /**
+  * Walk the stack, translating PC's found into strings and recording the
+@@ -249,6 +253,9 @@ static void DoMozStackWalkThread(MozWalkStackCallback aCallback,
+                                  const void* aFirstFramePC, uint32_t aMaxFrames,
+                                  void* aClosure, HANDLE aThread,
+                                  CONTEXT* aContext) {
 +#ifdef JS_ENABLE_UWP
 +  return;
 +#else
-   // Get a context for the specified thread.
-   CONTEXT context_buf;
-   CONTEXT* context;
-@@ -366,6 +371,7 @@ static void WalkStackMain64(struct WalkStackData* aData) {
+   InitializeDbgHelpCriticalSection();
+ 
+   HANDLE targetThread = aThread;
+@@ -416,6 +423,7 @@ static void DoMozStackWalkThread(MozWalkStackCallback aCallback,
      }
  #  endif
    }
 +#endif
  }
  
- /**
+ MFBT_API void MozStackWalkThread(MozWalkStackCallback aCallback,
 @@ -436,6 +442,7 @@ static BOOL CALLBACK callbackEspecial64(PCSTR aModuleName, DWORD64 aModuleBase,
    BOOL retval = TRUE;
    DWORD64 addr = *(DWORD64*)aUserContext;
