@@ -1870,6 +1870,10 @@ void CodeGenerator::visitWasmSelect(LWasmSelect* ins) {
   }
 }
 
+void CodeGenerator::visitWasmCompareAndSelect(LWasmCompareAndSelect* ins) {
+  emitWasmCompareAndSelect(ins);
+}
+
 void CodeGenerator::visitWasmReinterpret(LWasmReinterpret* lir) {
   MOZ_ASSERT(gen->compilingWasm());
   MWasmReinterpret* ins = lir->mir();
@@ -2463,6 +2467,12 @@ void CodeGenerator::visitNegI(LNegI* ins) {
   masm.ma_neg(input, ToRegister(ins->output()));
 }
 
+void CodeGenerator::visitNegI64(LNegI64* ins) {
+  Register64 input = ToRegister64(ins->getInt64Operand(0));
+  MOZ_ASSERT(input == ToOutRegister64(ins));
+  masm.neg64(input);
+}
+
 void CodeGenerator::visitNegD(LNegD* ins) {
   FloatRegister input = ToFloatRegister(ins->input());
   masm.ma_vneg(input, ToFloatRegister(ins->output()));
@@ -2718,6 +2728,14 @@ void CodeGenerator::visitSignExtendInt64(LSignExtendInt64* lir) {
       break;
   }
   masm.ma_asr(Imm32(31), output.low, output.high);
+}
+
+void CodeGenerator::visitWasmExtendU32Index(LWasmExtendU32Index*) {
+  MOZ_CRASH("64-bit only");
+}
+
+void CodeGenerator::visitWasmWrapU32Index(LWasmWrapU32Index*) {
+  MOZ_CRASH("64-bit only");
 }
 
 void CodeGenerator::visitDivOrModI64(LDivOrModI64* lir) {
@@ -3143,6 +3161,11 @@ void CodeGenerator::visitWasmVariableShiftSimd128(
 
 void CodeGenerator::visitWasmConstantShiftSimd128(
     LWasmConstantShiftSimd128* ins) {
+  MOZ_CRASH("No SIMD");
+}
+
+void CodeGenerator::visitWasmSignReplicationSimd128(
+    LWasmSignReplicationSimd128* ins) {
   MOZ_CRASH("No SIMD");
 }
 

@@ -1763,6 +1763,13 @@ class BaseAssembler : public GenericAssembler {
     m_formatter.oneByteOp(OP_CMP_EvGv, offset, base, rhs);
   }
 
+  void cmpl_rm(RegisterID rhs, int32_t offset, RegisterID base,
+               RegisterID index, int scale) {
+    spew("cmpl       %s, " MEM_obs, GPReg32Name(rhs),
+         ADDR_obs(offset, base, index, scale));
+    m_formatter.oneByteOp(OP_CMP_EvGv, offset, base, index, scale, rhs);
+  }
+
   void cmpl_mr(int32_t offset, RegisterID base, RegisterID lhs) {
     spew("cmpl       " MEM_ob ", %s", ADDR_ob(offset, base), GPReg32Name(lhs));
     m_formatter.oneByteOp(OP_CMP_GvEv, offset, base, lhs);
@@ -3766,6 +3773,13 @@ class BaseAssembler : public GenericAssembler {
     MOZ_ASSERT(mask < 256);
     threeByteOpImmSimd("vpblendw", VEX_PD, OP3_PBLENDW_VdqWdqIb, ESCAPE_3A,
                        mask, src1, src0, dst);
+  }
+
+  void pblendvb_rr(XMMRegisterID other, XMMRegisterID dst) {
+    spew("%-11s%s, %s", "pblendvb", XMMRegName(other), XMMRegName(dst));
+    m_formatter.legacySSEPrefix(VEX_PD);
+    m_formatter.threeByteOp(OP3_PBLENDVB_VdqWdq, ESCAPE_38, (RegisterID)other,
+                            dst);
   }
 
   void vpinsrb_irr(unsigned lane, RegisterID src1, XMMRegisterID src0,

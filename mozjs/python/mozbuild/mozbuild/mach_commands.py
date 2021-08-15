@@ -18,6 +18,7 @@ import sys
 import tempfile
 import time
 
+import mozbuild.settings  # noqa need @SettingsProvider hook to execute
 import mozpack.path as mozpath
 
 from mach.decorators import (
@@ -73,7 +74,7 @@ class Watch(MachCommandBase):
     @Command(
         "watch",
         category="post-build",
-        description="Watch and re-build the tree.",
+        description="Watch and re-build (parts of) the tree.",
         conditions=[conditions.is_firefox],
     )
     @CommandArgument(
@@ -82,19 +83,16 @@ class Watch(MachCommandBase):
         action="store_true",
         help="Verbose output for what commands the watcher is running.",
     )
-    def watch(self, verbose=False):
-        """Watch and re-build the source tree."""
-
+    def watch(self, command_context, verbose=False):
+        """Watch and re-build (parts of) the source tree."""
         if not conditions.is_artifact_build(self):
             print(
-                "mach watch requires an artifact build. See "
-                "https://developer.mozilla.org/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_build"  # noqa
+                "WARNING: mach watch only rebuilds the `mach build faster` parts of the tree!"
             )
-            return 1
 
         if not self.substs.get("WATCHMAN", None):
             print(
-                "mach watch requires watchman to be installed. See "
+                "mach watch requires watchman to be installed and found at configure time. See "
                 "https://developer.mozilla.org/docs/Mozilla/Developer_guide/Build_Instructions/Incremental_builds_with_filesystem_watching"  # noqa
             )
             return 1
@@ -125,7 +123,7 @@ class CargoProvider(MachCommandBase):
     """Invoke cargo in useful ways."""
 
     @Command("cargo", category="build", description="Invoke cargo in useful ways.")
-    def cargo(self):
+    def cargo(self, command_context):
         self._sub_mach(["help", "cargo"])
         return 1
 
@@ -153,7 +151,9 @@ class CargoProvider(MachCommandBase):
         help="Run the tests in parallel using multiple processes.",
     )
     @CommandArgument("-v", "--verbose", action="store_true", help="Verbose output.")
-    def check(self, all_crates=None, crates=None, jobs=0, verbose=False):
+    def check(
+        self, command_context, all_crates=None, crates=None, jobs=0, verbose=False
+    ):
         # XXX duplication with `mach vendor rust`
         crates_and_roots = {
             "gkrust": "toolkit/library/rust",
@@ -202,25 +202,39 @@ class CargoProvider(MachCommandBase):
 class Doctor(MachCommandBase):
     """Provide commands for diagnosing common build environment problems"""
 
-    @Command("doctor", category="devenv", description="")
+    @Command(
+        "doctor",
+        category="devenv",
+        description="Diagnose and fix common development environment issues.",
+    )
     @CommandArgument(
         "--fix",
-        default=None,
+        default=False,
         action="store_true",
         help="Attempt to fix found problems.",
     )
-    def doctor(self, fix=None):
+    @CommandArgument(
+        "--verbose",
+        default=False,
+        action="store_true",
+        help="Print verbose information found by checks.",
+    )
+    def doctor(self, command_context, fix=False, verbose=False):
         self.activate_virtualenv()
-        from mozbuild.doctor import Doctor
+        from mozbuild.doctor import run_doctor
 
-        doctor = Doctor(self.topsrcdir, self.topobjdir, fix)
-        return doctor.check_all()
+        return run_doctor(
+            topsrcdir=self.topsrcdir,
+            topobjdir=self.topobjdir,
+            fix=fix,
+            verbose=verbose,
+        )
 
 
 @CommandProvider
 class Clobber(MachCommandBase):
     NO_AUTO_LOG = True
-    CLOBBER_CHOICES = set(["objdir", "python", "gradle"])
+    CLOBBER_CHOICES = {"objdir", "python", "gradle"}
 
     @Command(
         "clobber",
@@ -229,13 +243,13 @@ class Clobber(MachCommandBase):
     )
     @CommandArgument(
         "what",
-        default=["objdir", "python"],
+        default=["objdir"],
         nargs="*",
         help="Target to clobber, must be one of {{{}}} (default "
-        "objdir and python).".format(", ".join(CLOBBER_CHOICES)),
+        "objdir).".format(", ".join(CLOBBER_CHOICES)),
     )
     @CommandArgument("--full", action="store_true", help="Perform a full clobber")
-    def clobber(self, what, full=False):
+    def clobber(self, command_context, what, full=False):
         """Clean up the source and object directories.
 
         Performing builds and running various commands generate various files.
@@ -248,23 +262,22 @@ class Clobber(MachCommandBase):
         files) are not removed by default. If you would like to remove the
         object directory in its entirety, run with `--full`.
 
-        The `python` target will clean up various generated Python files from
-        the source directory and will remove untracked files from well-known
-        directories containing Python packages. Run this to remove .pyc files,
-        compiled C extensions, etc. Note: all files not tracked or ignored by
-        version control in third_party/python will be deleted. Run the `status`
-        command of your VCS to see if any untracked files you haven't committed
-        yet will be deleted.
+        The `python` target will clean up Python's generated files (virtualenvs,
+        ".pyc", "__pycache__", etc).
 
         The `gradle` target will remove the "gradle" subdirectory of the object
         directory.
 
-        By default, the command clobbers the `objdir` and `python` targets.
+        By default, the command clobbers the `objdir` target.
         """
         what = set(what)
         invalid = what - self.CLOBBER_CHOICES
         if invalid:
-            print("Unknown clobber target(s): {}".format(", ".join(invalid)))
+            print(
+                "Unknown clobber target(s): {}. Choose from {{{}}}".format(
+                    ", ".join(invalid), ", ".join(self.CLOBBER_CHOICES)
+                )
+            )
             return 1
 
         ret = 0
@@ -272,9 +285,12 @@ class Clobber(MachCommandBase):
             from mozbuild.controller.clobber import Clobberer
 
             try:
-                Clobberer(self.topsrcdir, self.topobjdir, self.substs).remove_objdir(
-                    full
-                )
+                substs = self.substs
+            except BuildEnvironmentNotFoundException:
+                substs = {}
+
+            try:
+                Clobberer(self.topsrcdir, self.topobjdir, substs).remove_objdir(full)
             except OSError as e:
                 if sys.platform.startswith("win"):
                     if isinstance(e, WindowsError) and e.winerror in (5, 32):
@@ -300,8 +316,6 @@ class Clobber(MachCommandBase):
                     "glob:**.py[cdo]",
                     "-I",
                     "glob:**/__pycache__",
-                    "-I",
-                    "path:third_party/python/",
                 ]
             elif conditions.is_git(self):
                 cmd = [
@@ -312,11 +326,8 @@ class Clobber(MachCommandBase):
                     "-x",
                     "*.py[cdo]",
                     "*/__pycache__/*",
-                    "third_party/python/",
                 ]
             else:
-                # We don't know what is tracked/untracked if we don't have VCS.
-                # So we can't clean python/ and third_party/python/.
                 cmd = ["find", ".", "-type", "f", "-name", "*.py[cdo]", "-delete"]
                 subprocess.call(cmd, cwd=self.topsrcdir)
                 cmd = [
@@ -330,18 +341,14 @@ class Clobber(MachCommandBase):
                     "-delete",
                 ]
             ret = subprocess.call(cmd, cwd=self.topsrcdir)
+            shutil.rmtree(
+                mozpath.join(self.topobjdir, "_virtualenvs"), ignore_errors=True
+            )
 
         if "gradle" in what:
-            shutil.rmtree(mozpath.join(self.topobjdir, "gradle"))
+            shutil.rmtree(mozpath.join(self.topobjdir, "gradle"), ignore_errors=True)
 
         return ret
-
-    @property
-    def substs(self):
-        try:
-            return super(Clobber, self).substs
-        except BuildEnvironmentNotFoundException:
-            return {}
 
 
 @CommandProvider
@@ -358,7 +365,7 @@ class Logs(MachCommandBase):
         help="Filename to read log data from. Defaults to the log of the last "
         "mach command.",
     )
-    def show_log(self, log_file=None):
+    def show_log(self, command_context, log_file=None):
         if not log_file:
             path = self._get_state_filename("last_log.json")
             log_file = open(path, "rb")
@@ -412,15 +419,13 @@ class Logs(MachCommandBase):
 class Warnings(MachCommandBase):
     """Provide commands for inspecting warnings."""
 
-    @property
     def database_path(self):
         return self._get_state_filename("warnings.json")
 
-    @property
     def database(self):
         from mozbuild.compilation.warnings import WarningsDatabase
 
-        path = self.database_path
+        path = self.database_path()
 
         database = WarningsDatabase()
 
@@ -447,8 +452,8 @@ class Warnings(MachCommandBase):
         help="Warnings report to display. If not defined, show the most "
         "recent report.",
     )
-    def summary(self, directory=None, report=None):
-        database = self.database
+    def summary(self, command_context, directory=None, report=None):
+        database = self.database()
 
         if directory:
             dirpath = self.join_ensure_dir(self.topsrcdir, directory)
@@ -488,8 +493,8 @@ class Warnings(MachCommandBase):
         help="Warnings report to display. If not defined, show the most "
         "recent report.",
     )
-    def list(self, directory=None, flags=None, report=None):
-        database = self.database
+    def list(self, command_context, directory=None, flags=None, report=None):
+        database = self.database()
 
         by_name = sorted(database.warnings)
 
@@ -556,7 +561,13 @@ class GTestCommands(MachCommandBase):
         metavar="gtest_filter",
         help="test_filter is a ':'-separated list of wildcard patterns "
         "(called the positive patterns), optionally followed by a '-' "
-        "and another ':'-separated pattern list (called the negative patterns).",
+        "and another ':'-separated pattern list (called the negative patterns)."
+        "Test names are of the format SUITE.NAME. Use --list-tests to see all.",
+    )
+    @CommandArgument(
+        "--list-tests",
+        action="store_true",
+        help="list all available tests",
     )
     @CommandArgument(
         "--jobs",
@@ -646,9 +657,11 @@ class GTestCommands(MachCommandBase):
     )
     def gtest(
         self,
+        command_context,
         shuffle,
         jobs,
         gtest_filter,
+        list_tests,
         tbpl_parser,
         enable_webrender,
         package,
@@ -724,6 +737,9 @@ class GTestCommands(MachCommandBase):
         if sys.platform.startswith("win") and "MOZ_LAUNCHER_PROCESS" in self.defines:
             args.append("--wait-for-browser")
 
+        if list_tests:
+            args.append("--gtest_list_tests")
+
         if debug or debugger or debugger_args:
             args = _prepend_debugger_args(args, debugger, debugger_args)
             if not args:
@@ -731,7 +747,7 @@ class GTestCommands(MachCommandBase):
 
         # Use GTest environment variable to control test execution
         # For details see:
-        # https://code.google.com/p/googletest/wiki/AdvancedGuide#Running_Test_Programs:_Advanced_Options
+        # https://google.github.io/googletest/advanced.html#running-test-programs-advanced-options
         gtest_env = {b"GTEST_FILTER": gtest_filter}
 
         # Note: we must normalize the path here so that gtest on Windows sees
@@ -877,7 +893,7 @@ class Package(MachCommandBase):
         action="store_true",
         help="Verbose output for what commands the packaging process is running.",
     )
-    def package(self, verbose=False):
+    def package(self, command_context, verbose=False):
         ret = self._run_make(
             directory=".", target="package", silent=not verbose, ensure_exit_code=False
         )
@@ -920,7 +936,7 @@ class Install(MachCommandBase):
         parser=setup_install_parser,
         description="Install the package on the machine (or device in the case of Android).",
     )
-    def install(self, **kwargs):
+    def install(self, command_context, **kwargs):
         if conditions.is_android(self):
             from mozrunner.devices.android_device import (
                 verify_android_device,
@@ -1229,7 +1245,7 @@ class RunProgram(MachCommandBase):
         parser=setup_run_parser,
         description="Run the compiled program, possibly under a debugger or DMD.",
     )
-    def run(self, **kwargs):
+    def run(self, command_context, **kwargs):
         if conditions.is_android(self):
             return self._run_android(**kwargs)
         if conditions.is_jsshell(self):
@@ -1839,7 +1855,7 @@ class Buildsymbols(MachCommandBase):
         category="post-build",
         description="Produce a package of Breakpad-format symbols.",
     )
-    def buildsymbols(self):
+    def buildsymbols(self, command_context):
         return self._run_make(
             directory=".", target="buildsymbols", ensure_exit_code=False
         )
@@ -1862,7 +1878,7 @@ class MachDebug(MachCommandBase):
     @CommandArgument(
         "--verbose", "-v", action="store_true", help="Print verbose output."
     )
-    def environment(self, format, output=None, verbose=False):
+    def environment(self, command_context, format, output=None, verbose=False):
         func = getattr(self, "_environment_%s" % format.replace(".", "_"))
 
         if output:
@@ -1961,7 +1977,7 @@ class Repackage(MachCommandBase):
         category="misc",
         description="Repackage artifacts into different formats.",
     )
-    def repackage(self):
+    def repackage(self, command_context):
         print("Usage: ./mach repackage [dmg|installer|mar] [args...]")
 
     @SubCommand(
@@ -1969,7 +1985,7 @@ class Repackage(MachCommandBase):
     )
     @CommandArgument("--input", "-i", type=str, required=True, help="Input filename")
     @CommandArgument("--output", "-o", type=str, required=True, help="Output filename")
-    def repackage_dmg(self, input, output):
+    def repackage_dmg(self, command_context, input, output):
         if not os.path.exists(input):
             print("Input file does not exist: %s" % input)
             return 1
@@ -2023,7 +2039,15 @@ class Repackage(MachCommandBase):
         help="Run UPX on the self-extraction stub.",
     )
     def repackage_installer(
-        self, tag, setupexe, package, output, package_name, sfx_stub, use_upx
+        self,
+        command_context,
+        tag,
+        setupexe,
+        package,
+        output,
+        package_name,
+        sfx_stub,
+        use_upx,
     ):
         from mozbuild.repackaging.installer import repackage_installer
 
@@ -2066,7 +2090,16 @@ class Repackage(MachCommandBase):
     )
     @CommandArgument("--output", "-o", type=str, required=True, help="Output filename")
     def repackage_msi(
-        self, wsx, version, locale, arch, setupexe, candle, light, output
+        self,
+        command_context,
+        wsx,
+        version,
+        locale,
+        arch,
+        setupexe,
+        candle,
+        light,
+        output,
     ):
         from mozbuild.repackaging.msi import repackage_msi
 
@@ -2090,7 +2123,7 @@ class Repackage(MachCommandBase):
         "--arch", type=str, required=True, help="The archtecture you are building."
     )
     @CommandArgument("--mar-channel-id", type=str, help="Mar channel id")
-    def repackage_mar(self, input, mar, output, arch, mar_channel_id):
+    def repackage_mar(self, command_context, input, mar, output, arch, mar_channel_id):
         from mozbuild.repackaging.mar import repackage_mar
 
         repackage_mar(
@@ -2101,20 +2134,6 @@ class Repackage(MachCommandBase):
             arch=arch,
             mar_channel_id=mar_channel_id,
         )
-
-
-@SettingsProvider
-class TelemetrySettings:
-    config_settings = [
-        (
-            "build.telemetry",
-            "boolean",
-            """
-Enable submission of build system telemetry.
-        """.strip(),
-            False,
-        ),
-    ]
 
 
 @CommandProvider
@@ -2135,7 +2154,7 @@ class L10NCommands(MachCommandBase):
     @CommandArgument(
         "--verbose", action="store_true", help="Log informative status messages."
     )
-    def package_l10n(self, verbose=False, locales=[]):
+    def package_l10n(self, command_context, verbose=False, locales=[]):
         if "RecursiveMake" not in self.substs["BUILD_BACKENDS"]:
             print(
                 "Artifact builds do not support localization. "
@@ -2265,12 +2284,7 @@ class CreateMachEnvironment(MachCommandBase):
     @Command(
         "create-mach-environment",
         category="devenv",
-        description=(
-            "Create the `mach` virtualenvs. If executed with python3 (the "
-            "default when entering from `mach`), create both a python3 "
-            "and python2.7 virtualenv. If executed with python2, only "
-            "create the python2.7 virtualenv."
-        ),
+        description="Create the `mach` virtualenv.",
     )
     @CommandArgument(
         "-f",
@@ -2278,13 +2292,33 @@ class CreateMachEnvironment(MachCommandBase):
         action="store_true",
         help=("Force re-creating the virtualenv even if it is already " "up-to-date."),
     )
-    def create_mach_environment(self, force=False):
+    def create_mach_environment(self, command_context, force=False):
         from mozboot.util import get_mach_virtualenv_root
-        from mozbuild.pythonutil import find_python2_executable
         from mozbuild.virtualenv import VirtualenvManager
-        from six import PY2
 
-        virtualenv_path = get_mach_virtualenv_root(py2=PY2)
+        if sys.platform.startswith("darwin") and not os.environ.get(
+            "MACH_I_DO_WANT_TO_USE_ROSETTA"
+        ):
+            # If running on arm64 mac, check whether we're running under
+            # Rosetta and advise against it.
+            proc = subprocess.run(
+                ["sysctl", "-n", "sysctl.proc_translated"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            if (
+                proc.returncode == 0
+                and proc.stdout.decode("ascii", "replace").strip() == "1"
+            ):
+                print(
+                    "Python is being emulated under Rosetta. Please use a native "
+                    "Python instead. If you still really want to go ahead, set "
+                    "the MACH_I_DO_WANT_TO_USE_ROSETTA environment variable.",
+                    file=sys.stderr,
+                )
+                return 1
+
+        virtualenv_path = get_mach_virtualenv_root()
         if sys.executable.startswith(virtualenv_path):
             print(
                 "You can only create a mach environment with the system "
@@ -2318,50 +2352,22 @@ class CreateMachEnvironment(MachCommandBase):
                 "data. Continuing."
             )
 
-        if not PY2:
-            manager.install_pip_requirements(
-                os.path.join(self.topsrcdir, "build", "zstandard_requirements.txt")
-            )
+        manager.install_pip_requirements(
+            os.path.join(self.topsrcdir, "build", "zstandard_requirements.txt")
+        )
 
-            # This can fail on some platforms. See
-            # https://bugzilla.mozilla.org/show_bug.cgi?id=1660120
-            try:
-                manager.install_pip_requirements(
-                    os.path.join(self.topsrcdir, "build", "glean_requirements.txt")
-                )
-            except subprocess.CalledProcessError:
-                print(
-                    "Could not install glean_sdk, so telemetry will not be "
-                    "collected. Continuing."
-                )
-            print("Python 3 mach environment created.")
-            if platform.system() == "Darwin" and platform.machine() == "arm64":
-                # Skip the creation of a python2 virtualenv on arm64 mac because
-                # of https://github.com/pypa/virtualenv/issues/2023
-                return
-            python2, _ = find_python2_executable()
-            if not python2:
-                print(
-                    "WARNING! Could not find a Python 2 executable to create "
-                    "a Python 2 virtualenv",
-                    file=sys.stderr,
-                )
-                return 0
-            args = [
-                python2,
-                os.path.join(self.topsrcdir, "mach"),
-                "create-mach-environment",
-            ]
-            if force:
-                args.append("-f")
-            ret = subprocess.call(args)
-            if ret:
-                print(
-                    "WARNING! Failed to create a Python 2 mach environment.",
-                    file=sys.stderr,
-                )
-        else:
-            print("Python 2 mach environment created.")
+        # This can fail on some platforms. See
+        # https://bugzilla.mozilla.org/show_bug.cgi?id=1660120
+        try:
+            manager.install_pip_requirements(
+                os.path.join(self.topsrcdir, "build", "glean_requirements.txt")
+            )
+        except subprocess.CalledProcessError:
+            print(
+                "Could not install glean_sdk, so telemetry will not be "
+                "collected. Continuing."
+            )
+        print("Mach environment created.")
 
 
 def _prepend_debugger_args(args, debugger, debugger_args):

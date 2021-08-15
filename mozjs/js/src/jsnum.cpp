@@ -818,7 +818,7 @@ JSLinearString* js::Int32ToString(JSContext* cx, int32_t si) {
     return nullptr;
   }
   if (si >= 0) {
-    str->maybeInitializeIndex(si);
+    str->maybeInitializeIndexValue(si);
   }
 
   CacheNumber(cx, si, str);
@@ -1660,7 +1660,7 @@ static JSString* NumberToStringWithBase(JSContext* cx, double d, int base) {
   }
 
   if (isBase10Int && i >= 0) {
-    s->maybeInitializeIndex(i);
+    s->maybeInitializeIndexValue(i);
   }
 
   realm->dtoaCache.cache(base, d, s);
@@ -1761,8 +1761,8 @@ JSLinearString* js::IndexToString(JSContext* cx, uint32_t index) {
   return str;
 }
 
-bool JS_FASTCALL js::NumberValueToStringBuffer(JSContext* cx, const Value& v,
-                                               StringBuffer& sb) {
+bool js::NumberValueToStringBuffer(JSContext* cx, const Value& v,
+                                   StringBuffer& sb) {
   /* Convert to C-string. */
   ToCStringBuf cbuf;
   const char* cstr;

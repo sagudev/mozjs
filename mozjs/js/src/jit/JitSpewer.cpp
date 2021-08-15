@@ -11,24 +11,12 @@
 #  include "mozilla/Atomics.h"
 #  include "mozilla/Sprintf.h"
 
-#  ifdef XP_WIN
-#    ifdef JS_ENABLE_UWP
-#      define UNICODE
-#      include <Windows.h>
-#      include <processthreadsapi.h>
-#      define getpid GetCurrentProcessId
-#    else
-#      include <process.h>
-#      define getpid _getpid
-#    endif
-#  else
-#    include <unistd.h>
-#  endif
 #  include "jit/Ion.h"
 #  include "jit/MIR.h"
 #  include "jit/MIRGenerator.h"
 #  include "jit/MIRGraph.h"
 #  include "threading/LockGuard.h"
+#  include "util/GetPidProvider.h"  // getpid()
 #  include "util/Text.h"
 #  include "vm/HelperThreads.h"
 #  include "vm/MutexIDs.h"
@@ -343,12 +331,8 @@ AutoSpewEndFunction::~AutoSpewEndFunction() {
   mir_->graphSpewer().endFunction();
 }
 
-GenericPrinter& jit::JitSpewPrinter() {
-#ifdef JS_ENABLE_UWP
-  static UWPPrinter out;
-#else
+Fprinter& jit::JitSpewPrinter() {
   static Fprinter out;
-#endif
   return out;
 }
 
@@ -419,18 +403,10 @@ void jit::CheckLogging() {
 
   LoggingChecked = true;
 
-#ifdef JS_ENABLE_UWP
-  wchar_t wideEnvBuf[1024] = { 0 };
-  GetEnvironmentVariable(L"IONFLAGS", wideEnvBuf, sizeof(wideEnvBuf));
-  char envBuf[1024] = { 0 };
-  wcstombs(envBuf, wideEnvBuf, sizeof(envBuf));
-  char* env = &envBuf[0];
-#else
   char* env = getenv("IONFLAGS");
   if (!env) {
     return;
   }
-#endif
 
   const char* found = strtok(env, ",");
   while (found) {
@@ -537,7 +513,6 @@ void jit::CheckLogging() {
     found = strtok(nullptr, ",");
   }
 
-#ifndef JS_ENABLE_UWP
   FILE* spewfh = stderr;
   const char* filename = getenv("ION_SPEW_FILENAME");
   if (filename && *filename) {
@@ -547,8 +522,7 @@ void jit::CheckLogging() {
     MOZ_RELEASE_ASSERT(spewfh);
     setbuf(spewfh, nullptr);  // Make unbuffered
   }
-  ((Fprinter&)JitSpewPrinter()).init(spewfh);
-#endif
+  JitSpewPrinter().init(spewfh);
 }
 
 JitSpewIndent::JitSpewIndent(JitSpewChannel channel) : channel_(channel) {
@@ -563,7 +537,7 @@ void jit::JitSpewStartVA(JitSpewChannel channel, const char* fmt, va_list ap) {
   }
 
   JitSpewHeader(channel);
-  GenericPrinter& out = JitSpewPrinter();
+  Fprinter& out = JitSpewPrinter();
   out.vprintf(fmt, ap);
 }
 
@@ -572,7 +546,7 @@ void jit::JitSpewContVA(JitSpewChannel channel, const char* fmt, va_list ap) {
     return;
   }
 
-  GenericPrinter& out = JitSpewPrinter();
+  Fprinter& out = JitSpewPrinter();
   out.vprintf(fmt, ap);
 }
 
@@ -581,7 +555,7 @@ void jit::JitSpewFin(JitSpewChannel channel) {
     return;
   }
 
-  GenericPrinter& out = JitSpewPrinter();
+  Fprinter& out = JitSpewPrinter();
   out.put("\n");
 }
 
@@ -604,7 +578,7 @@ void jit::JitSpewDef(JitSpewChannel channel, const char* str,
   }
 
   JitSpewHeader(channel);
-  GenericPrinter& out = JitSpewPrinter();
+  Fprinter& out = JitSpewPrinter();
   out.put(str);
   def->dump(out);
   def->dumpLocation(out);
@@ -628,7 +602,7 @@ void jit::JitSpewHeader(JitSpewChannel channel) {
     return;
   }
 
-  GenericPrinter& out = JitSpewPrinter();
+  Fprinter& out = JitSpewPrinter();
   out.printf("[%s] ", ChannelNames[channel]);
   for (size_t i = ChannelIndentLevel[channel]; i != 0; i--) {
     out.put("  ");
@@ -649,6 +623,37 @@ void jit::EnableChannel(JitSpewChannel channel) {
 void jit::DisableChannel(JitSpewChannel channel) {
   MOZ_ASSERT(LoggingChecked);
   LoggingBits &= ~(uint64_t(1) << uint32_t(channel));
+}
+
+const char* js::jit::ValTypeToString(JSValueType type) {
+  switch (type) {
+    case JSVAL_TYPE_DOUBLE:
+      return "Double";
+    case JSVAL_TYPE_INT32:
+      return "Int32";
+    case JSVAL_TYPE_BOOLEAN:
+      return "Boolean";
+    case JSVAL_TYPE_UNDEFINED:
+      return "Undefined";
+    case JSVAL_TYPE_NULL:
+      return "Null";
+    case JSVAL_TYPE_MAGIC:
+      return "Magic";
+    case JSVAL_TYPE_STRING:
+      return "String";
+    case JSVAL_TYPE_SYMBOL:
+      return "Symbol";
+    case JSVAL_TYPE_PRIVATE_GCTHING:
+      return "PrivateGCThing";
+    case JSVAL_TYPE_BIGINT:
+      return "BigInt";
+    case JSVAL_TYPE_OBJECT:
+      return "Object";
+    case JSVAL_TYPE_UNKNOWN:
+      return "None";
+    default:
+      MOZ_CRASH("Unknown JSValueType");
+  }
 }
 
 #endif /* JS_JITSPEW */

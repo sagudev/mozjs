@@ -20,8 +20,10 @@
 #include "gc/Statistics.h"
 #include "gc/ZoneAllocator.h"
 #include "js/GCHashTable.h"
+#include "js/Vector.h"
 #include "vm/AtomsTable.h"
 #include "vm/JSFunction.h"
+#include "vm/ShapeZone.h"
 
 namespace js {
 
@@ -235,6 +237,8 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
   js::MainThreadData<unsigned> gcSweepGroupIndex;
 #endif
 
+  js::gc::PretenuringZone pretenuring;
+
  private:
   // Side map for storing unique ids for cells, independent of address.
   js::ZoneOrGCTaskData<js::gc::UniqueIdMap> uniqueIds_;
@@ -266,8 +270,8 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
   // Mapping from not yet marked keys to a vector of all values that the key
   // maps to in any live weak map. Separate tables for nursery and tenured
   // keys.
-  js::ZoneOrGCTaskData<js::gc::WeakKeyTable> gcWeakKeys_;
-  js::ZoneOrGCTaskData<js::gc::WeakKeyTable> gcNurseryWeakKeys_;
+  js::ZoneOrGCTaskData<js::gc::EphemeronEdgeTable> gcEphemeronEdges_;
+  js::ZoneOrGCTaskData<js::gc::EphemeronEdgeTable> gcNurseryEphemeronEdges_;
 
   // Keep track of all RttValue and related objects in this compartment.
   // This is used by the GC to trace them all first when compacting, since the
@@ -296,22 +300,8 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
   // Cache for Function.prototype.toString. Purged on GC.
   js::ZoneOrGCTaskData<js::FunctionToStringCache> functionToStringCache_;
 
-  // Shared Shape property tree.
-  js::ZoneData<js::PropertyTree> propertyTree_;
-
-  // Set of all unowned base shapes in the Zone.
-  js::ZoneData<js::BaseShapeSet> baseShapes_;
-
-  // Set of initial shapes in the Zone. For certain prototypes -- namely,
-  // those of various builtin classes -- there are two entries: one for a
-  // lookup via TaggedProto, and one for a lookup via JSProtoKey. See
-  // InitialShapeProto.
-  js::ZoneData<js::InitialShapeSet> initialShapes_;
-
-  // List of shapes that may contain nursery pointers.
-  using NurseryShapeVector =
-      js::Vector<js::AccessorShape*, 0, js::SystemAllocPolicy>;
-  js::ZoneData<NurseryShapeVector> nurseryShapes_;
+  // Information about Shapes and BaseShapes.
+  js::ZoneData<js::ShapeZone> shapeZone_;
 
   // The set of all finalization registries in this zone.
   using FinalizationRegistrySet =
@@ -332,7 +322,7 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
   js::MainThreadData<bool> gcScheduled_;
   js::MainThreadData<bool> gcScheduledSaved_;
   js::MainThreadData<bool> gcPreserveCode_;
-  js::ZoneData<bool> keepShapeCaches_;
+  js::ZoneData<bool> keepPropMapTables_;
   js::MainThreadData<bool> wasCollected_;
 
   // Allow zones to be linked into a list
@@ -387,27 +377,29 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
 
   [[nodiscard]] bool findSweepGroupEdges(Zone* atomsZone);
 
-  enum ShouldDiscardBaselineCode : bool {
-    KeepBaselineCode = false,
-    DiscardBaselineCode
+  struct DiscardOptions {
+    DiscardOptions() {}
+    bool discardBaselineCode = true;
+    bool discardJitScripts = false;
+    bool resetNurseryAllocSites = false;
+    bool resetPretenuredAllocSites = false;
   };
 
-  enum ShouldDiscardJitScripts : bool {
-    KeepJitScripts = false,
-    DiscardJitScripts
-  };
+  void discardJitCode(JSFreeOp* fop,
+                      const DiscardOptions& options = DiscardOptions());
 
-  void discardJitCode(
-      JSFreeOp* fop,
-      ShouldDiscardBaselineCode discardBaselineCode = DiscardBaselineCode,
-      ShouldDiscardJitScripts discardJitScripts = KeepJitScripts);
+  void resetAllocSitesAndInvalidate(bool resetNurserySites,
+                                    bool resetPretenuredSites);
 
-  void addSizeOfIncludingThis(
-      mozilla::MallocSizeOf mallocSizeOf, JS::CodeSizes* code,
-      size_t* regexpZone, size_t* jitZone, size_t* baselineStubsOptimized,
-      size_t* uniqueIdMap, size_t* shapeCaches, size_t* atomsMarkBitmaps,
-      size_t* compartmentObjects, size_t* crossCompartmentWrappersTables,
-      size_t* compartmentsPrivateData, size_t* scriptCountsMapArg);
+  void addSizeOfIncludingThis(mozilla::MallocSizeOf mallocSizeOf,
+                              JS::CodeSizes* code, size_t* regexpZone,
+                              size_t* jitZone, size_t* baselineStubsOptimized,
+                              size_t* uniqueIdMap, size_t* initialPropMapTable,
+                              size_t* shapeTables, size_t* atomsMarkBitmaps,
+                              size_t* compartmentObjects,
+                              size_t* crossCompartmentWrappersTables,
+                              size_t* compartmentsPrivateData,
+                              size_t* scriptCountsMapArg);
 
   // Iterate over all cells in the zone. See the definition of ZoneCellIter
   // in gc/GC-inl.h for the possible arguments and documentation.
@@ -544,18 +536,21 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
 
   void beforeClearDelegateInternal(JSObject* wrapper, JSObject* delegate);
   void afterAddDelegateInternal(JSObject* wrapper);
-  js::gc::WeakKeyTable& gcWeakKeys() { return gcWeakKeys_.ref(); }
-  js::gc::WeakKeyTable& gcNurseryWeakKeys() { return gcNurseryWeakKeys_.ref(); }
+  js::gc::EphemeronEdgeTable& gcEphemeronEdges() {
+    return gcEphemeronEdges_.ref();
+  }
+  js::gc::EphemeronEdgeTable& gcNurseryEphemeronEdges() {
+    return gcNurseryEphemeronEdges_.ref();
+  }
 
-  js::gc::WeakKeyTable& gcWeakKeys(const js::gc::Cell* cell) {
-    return cell->isTenured() ? gcWeakKeys() : gcNurseryWeakKeys();
+  js::gc::EphemeronEdgeTable& gcEphemeronEdges(const js::gc::Cell* cell) {
+    return cell->isTenured() ? gcEphemeronEdges() : gcNurseryEphemeronEdges();
   }
 
   // Perform all pending weakmap entry marking for this zone after
   // transitioning to weak marking mode.
   js::gc::IncrementalProgress enterWeakMarkingMode(js::GCMarker* marker,
                                                    js::SliceBudget& budget);
-  void checkWeakMarkingMode();
 
   // A set of edges from this zone to other zones used during GC to calculate
   // sweep groups.
@@ -593,15 +588,8 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
     return functionToStringCache_.ref();
   }
 
-  js::PropertyTree& propertyTree() { return propertyTree_.ref(); }
+  js::ShapeZone& shapeZone() { return shapeZone_.ref(); }
 
-  js::BaseShapeSet& baseShapes() { return baseShapes_.ref(); }
-
-  js::InitialShapeSet& initialShapes() { return initialShapes_.ref(); }
-
-  NurseryShapeVector& nurseryShapes() { return nurseryShapes_.ref(); }
-
-  void fixupInitialShapeTable();
   void fixupAfterMovingGC();
   void fixupScriptMapsAfterMovingGC(JSTracer* trc);
 
@@ -634,8 +622,8 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
   // off-thread zone into the target zone.
   void adoptUniqueIds(JS::Zone* source);
 
-  bool keepShapeCaches() const { return keepShapeCaches_; }
-  void setKeepShapeCaches(bool b) { keepShapeCaches_ = b; }
+  bool keepPropMapTables() const { return keepPropMapTables_; }
+  void setKeepPropMapTables(bool b) { keepPropMapTables_ = b; }
 
   // Delete an empty compartment after its contents have been merged.
   void deleteEmptyCompartment(JS::Compartment* comp);
@@ -658,12 +646,16 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
   // See: https://tc39.es/proposal-weakrefs/#sec-clear-kept-objects
   void clearKeptObjects();
 
+  js::gc::AllocSite* unknownAllocSite() {
+    return &pretenuring.unknownAllocSite;
+  }
+  js::gc::AllocSite* optimizedAllocSite() {
+    return &pretenuring.optimizedAllocSite;
+  }
+
 #ifdef JSGC_HASH_TABLE_CHECKS
   void checkAllCrossCompartmentWrappersAfterMovingGC();
   void checkStringWrappersAfterMovingGC();
-
-  void checkInitialShapesTableAfterMovingGC();
-  void checkBaseShapeTableAfterMovingGC();
 
   // Assert that the UniqueId table has been redirected successfully.
   void checkUniqueIdTableAfterMovingGC();
@@ -682,7 +674,7 @@ class Zone : public js::ZoneAllocator, public js::gc::GraphNodeBase<JS::Zone> {
 
   bool isQueuedForBackgroundSweep() { return isOnList(); }
 
-  void sweepWeakKeysAfterMinorGC();
+  void sweepEphemeronTablesAfterMinorGC();
 
   FinalizationRegistrySet& finalizationRegistries() {
     return finalizationRegistries_.ref();

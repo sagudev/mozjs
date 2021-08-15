@@ -7,11 +7,12 @@
 #ifndef frontend_ParserAtom_h
 #define frontend_ParserAtom_h
 
-#include "mozilla/DebugOnly.h"      // mozilla::DebugOnly
-#include "mozilla/HashFunctions.h"  // mozilla::HashString
-#include "mozilla/Range.h"          // mozilla::Range
-#include "mozilla/Span.h"           // mozilla::Span
-#include "mozilla/Variant.h"        // mozilla::Variant
+#include "mozilla/DebugOnly.h"        // mozilla::DebugOnly
+#include "mozilla/HashFunctions.h"    // mozilla::HashString
+#include "mozilla/MemoryReporting.h"  // mozilla::MallocSizeOf
+#include "mozilla/Range.h"            // mozilla::Range
+#include "mozilla/Span.h"             // mozilla::Span
+#include "mozilla/Variant.h"          // mozilla::Variant
 
 #include "ds/LifoAlloc.h"         // LifoAlloc
 #include "frontend/TypedIndex.h"  // TypedIndex
@@ -140,6 +141,13 @@ class TaggedParserAtomIndex {
     JS_FOR_EACH_PROTOTYPE(METHOD_)
 #undef METHOD_
 
+#define METHOD_(NAME)                                    \
+  static constexpr TaggedParserAtomIndex NAME() {        \
+    return TaggedParserAtomIndex(WellKnownAtomId::NAME); \
+  }
+    JS_FOR_EACH_WELL_KNOWN_SYMBOL(METHOD_)
+#undef METHOD_
+
 #define METHOD_(_, NAME, STR)                                          \
   static constexpr TaggedParserAtomIndex NAME() {                      \
     return TaggedParserAtomIndex(Length1StaticParserString((STR)[0])); \
@@ -176,6 +184,13 @@ class TaggedParserAtomIndex {
     return uint32_t(WellKnownAtomId::NAME) | WellKnownTag | WellKnownSubTag; \
   }
     JS_FOR_EACH_PROTOTYPE(METHOD_)
+#undef METHOD_
+
+#define METHOD_(NAME)                                                        \
+  static constexpr uint32_t NAME() {                                         \
+    return uint32_t(WellKnownAtomId::NAME) | WellKnownTag | WellKnownSubTag; \
+  }
+    JS_FOR_EACH_WELL_KNOWN_SYMBOL(METHOD_)
 #undef METHOD_
 
 #define METHOD_(_, NAME, STR)                                       \
@@ -544,6 +559,11 @@ class WellKnownParserAtoms {
 
     // No match on tiny Atoms
     return TaggedParserAtomIndex::null();
+  }
+
+  size_t sizeOfIncludingThis(mozilla::MallocSizeOf mallocSizeOf) const {
+    return mallocSizeOf(this) +
+           wellKnownMap_.shallowSizeOfExcludingThis(mallocSizeOf);
   }
 };
 

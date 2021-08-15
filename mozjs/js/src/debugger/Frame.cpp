@@ -73,13 +73,12 @@
 #include "wasm/WasmJS.h"                   // for WasmInstanceObject
 #include "wasm/WasmTypes.h"                // for DebugFrame
 
-#include "debugger/Debugger-inl.h"  // for Debugger::fromJSObject
-#include "gc/WeakMap-inl.h"         // for WeakMap::remove
-#include "vm/Compartment-inl.h"     // for Compartment::wrap
-#include "vm/JSContext-inl.h"       // for JSContext::check
-#include "vm/JSObject-inl.h"        // for NewObjectWithGivenProto
-#include "vm/JSScript-inl.h"        // for JSScript::ensureHasAnalyzedArgsUsage
-#include "vm/NativeObject-inl.h"    // for NativeObject::global
+#include "debugger/Debugger-inl.h"    // for Debugger::fromJSObject
+#include "gc/WeakMap-inl.h"           // for WeakMap::remove
+#include "vm/Compartment-inl.h"       // for Compartment::wrap
+#include "vm/JSContext-inl.h"         // for JSContext::check
+#include "vm/JSObject-inl.h"          // for NewObjectWithGivenProto
+#include "vm/NativeObject-inl.h"      // for NativeObject::global
 #include "vm/ObjectOperations-inl.h"  // for GetProperty
 #include "vm/Realm-inl.h"             // for AutoRealm::AutoRealm
 #include "vm/Stack-inl.h"             // for AbstractFramePtr::script
@@ -938,7 +937,11 @@ static bool EvaluateInEnv(JSContext* cx, Handle<Env*> env,
        * javascript executions sent through the debugger. Besides making up
        * a filename for these codepaths, we must allow arbitrary JS execution
        * for the Browser toolbox to function. */
-      .setSkipFilenameValidation(true);
+      .setSkipFilenameValidation(true)
+      /* Don't lazy parse. We need full-parsing to correctly support bytecode
+       * emission for private fields/methods. See EmitterScope::lookupPrivate.
+       */
+      .setForceFullParse();
 
   if (frame && frame.hasScript() && frame.script()->strict()) {
     options.setForceStrictMode();
@@ -1613,12 +1616,6 @@ static bool DebuggerArguments_getArg(JSContext* cx, unsigned argc, Value* vp) {
   RootedScript script(cx);
   if (unsigned(i) < frame.numActualArgs()) {
     script = frame.script();
-    {
-      AutoRealm ar(cx, script);
-      if (!script->ensureHasAnalyzedArgsUsage(cx)) {
-        return false;
-      }
-    }
     if (unsigned(i) < frame.numFormalArgs()) {
       for (PositionalFormalParameterIter fi(script); fi; fi++) {
         if (fi.argumentSlot() == unsigned(i)) {
@@ -1679,7 +1676,7 @@ DebuggerArguments* DebuggerArguments::create(JSContext* cx, HandleObject proto,
     }
     id = INT_TO_JSID(i);
     if (!NativeDefineAccessorProperty(cx, obj, id, getobj, nullptr,
-                                      JSPROP_ENUMERATE | JSPROP_GETTER)) {
+                                      JSPROP_ENUMERATE)) {
       return nullptr;
     }
     getobj->setExtendedSlot(0, Int32Value(i));
@@ -1936,16 +1933,16 @@ JSObject* js::IdVectorToArray(JSContext* cx, Handle<IdVector> ids) {
 
   for (size_t i = 0, len = ids.length(); i < len; i++) {
     jsid id = ids[i];
-    if (JSID_IS_INT(id)) {
-      JSString* str = Int32ToString<CanGC>(cx, JSID_TO_INT(id));
+    if (id.isInt()) {
+      JSString* str = Int32ToString<CanGC>(cx, id.toInt());
       if (!str) {
         return nullptr;
       }
       vals[i].setString(str);
-    } else if (JSID_IS_ATOM(id)) {
-      vals[i].setString(JSID_TO_STRING(id));
-    } else if (JSID_IS_SYMBOL(id)) {
-      vals[i].setSymbol(JSID_TO_SYMBOL(id));
+    } else if (id.isAtom()) {
+      vals[i].setString(id.toAtom());
+    } else if (id.isSymbol()) {
+      vals[i].setSymbol(id.toSymbol());
     } else {
       MOZ_ASSERT_UNREACHABLE(
           "IdVector must contain only string, int, and Symbol jsids");

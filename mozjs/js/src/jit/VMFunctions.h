@@ -29,6 +29,7 @@ class AbstractGeneratorObject;
 class GlobalObject;
 class InterpreterFrame;
 class LexicalScope;
+class ClassBodyScope;
 class NativeObject;
 class PropertyName;
 class Shape;
@@ -461,7 +462,7 @@ JSObject* CopyLexicalEnvironmentObject(JSContext* cx, HandleObject env,
                                        bool copySlots);
 
 JSObject* InitRestParameter(JSContext* cx, uint32_t length, Value* rest,
-                            HandleObject templateObj, HandleObject res);
+                            HandleObject res);
 
 [[nodiscard]] bool HandleDebugTrap(JSContext* cx, BaselineFrame* frame,
                                    uint8_t* retAddr);
@@ -474,6 +475,8 @@ JSObject* InitRestParameter(JSContext* cx, uint32_t length, Value* rest,
 
 [[nodiscard]] bool PushLexicalEnv(JSContext* cx, BaselineFrame* frame,
                                   Handle<LexicalScope*> scope);
+[[nodiscard]] bool PushClassBodyEnv(JSContext* cx, BaselineFrame* frame,
+                                    Handle<ClassBodyScope*> scope);
 [[nodiscard]] bool PopLexicalEnv(JSContext* cx, BaselineFrame* frame);
 [[nodiscard]] bool DebugLeaveThenPopLexicalEnv(JSContext* cx,
                                                BaselineFrame* frame,
@@ -560,7 +563,8 @@ bool HasNativeElementPure(JSContext* cx, NativeObject* obj, int32_t index,
 bool SetNativeDataPropertyPure(JSContext* cx, JSObject* obj, PropertyName* name,
                                Value* val);
 
-bool ObjectHasGetterSetterPure(JSContext* cx, JSObject* obj, Shape* propShape);
+bool ObjectHasGetterSetterPure(JSContext* cx, JSObject* objArg, jsid id,
+                               GetterSetter* getterSetter);
 
 JSString* TypeOfObject(JSObject* obj, JSRuntime* rt);
 

@@ -9,6 +9,10 @@ with Files("**"):
 
 Library("mfbt")
 
+EXPORTS += [
+    "../third_party/rust/encoding_c_mem/include/encoding_rs_mem.h",
+]
+
 EXPORTS.mozilla = [
     "Algorithm.h",
     "Alignment.h",
@@ -63,6 +67,7 @@ EXPORTS.mozilla = [
     "MathAlgorithms.h",
     "Maybe.h",
     "MaybeOneOf.h",
+    "MaybeStorageBase.h",
     "MemoryChecking.h",
     "MemoryReporting.h",
     "NonDereferenceable.h",
@@ -133,6 +138,11 @@ LOCAL_INCLUDES += [
 if CONFIG["OS_ARCH"] == "WINNT":
     EXPORTS.mozilla += [
         "WindowsVersion.h",
+    ]
+
+if CONFIG["OS_ARCH"] == "WASI":
+    EXPORTS.mozilla += [
+        "WasiAtomic.h",
     ]
 
 if CONFIG["MOZ_TSAN"]:

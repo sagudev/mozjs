@@ -54,7 +54,7 @@
 class JS_PUBLIC_API JSFunction;
 
 namespace JS {
-class JS_FRIEND_API AutoStableStringChars;
+class JS_PUBLIC_API AutoStableStringChars;
 class JS_PUBLIC_API Compartment;
 class JS_PUBLIC_API Realm;
 class JS_PUBLIC_API Zone;
@@ -1154,7 +1154,7 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
    * If *vp is a magic JS_OPTIMIZED_OUT value, this produces a plain object
    * of the form { optimizedOut: true }.
    *
-   * If *vp is a magic JS_OPTIMIZED_ARGUMENTS value signifying missing
+   * If *vp is a magic JS_MISSING_ARGUMENTS value signifying missing
    * arguments, this produces a plain object of the form { missingArguments:
    * true }.
    *

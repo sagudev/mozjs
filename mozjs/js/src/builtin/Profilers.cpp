@@ -14,6 +14,8 @@
 #include <iterator>
 #include <stdarg.h>
 
+#include "util/GetPidProvider.h"  // getpid()
+
 #ifdef MOZ_CALLGRIND
 #  include <valgrind/callgrind.h>
 #endif
@@ -21,16 +23,6 @@
 #ifdef __APPLE__
 #  ifdef MOZ_INSTRUMENTS
 #    include "devtools/Instruments.h"
-#  endif
-#endif
-
-#ifdef XP_WIN
-#  ifdef JS_ENABLE_UWP
-#    include <processthreadsapi.h>
-#    define getpid GetCurrentProcessId
-#  else
-#    include <process.h>
-#    define getpid _getpid
 #  endif
 #endif
 
@@ -415,18 +407,18 @@ JS_PUBLIC_API bool JS_DefineProfilingFunctions(JSContext* cx,
       JS_END_MACRO
 #  endif
 
-JS_FRIEND_API bool js_StartCallgrind() {
+JS_PUBLIC_API bool js_StartCallgrind() {
   JS_SILENCE_UNUSED_VALUE_IN_EXPR(CALLGRIND_START_INSTRUMENTATION);
   JS_SILENCE_UNUSED_VALUE_IN_EXPR(CALLGRIND_ZERO_STATS);
   return true;
 }
 
-JS_FRIEND_API bool js_StopCallgrind() {
+JS_PUBLIC_API bool js_StopCallgrind() {
   JS_SILENCE_UNUSED_VALUE_IN_EXPR(CALLGRIND_STOP_INSTRUMENTATION);
   return true;
 }
 
-JS_FRIEND_API bool js_DumpCallgrind(const char* outfile) {
+JS_PUBLIC_API bool js_DumpCallgrind(const char* outfile) {
   if (outfile) {
     JS_SILENCE_UNUSED_VALUE_IN_EXPR(CALLGRIND_DUMP_STATS_AT(outfile));
   } else {

@@ -93,8 +93,8 @@ DefaultJitOptions::DefaultJitOptions() {
   // Toggles whether loop invariant code motion is globally disabled.
   SET_DEFAULT(disableLicm, false);
 
-  // Toggle whether Profile Guided Optimization is globally disabled.
-  SET_DEFAULT(disablePgo, false);
+  // Toggle whether branch pruning is globally disabled.
+  SET_DEFAULT(disablePruning, false);
 
   // Toggles whether instruction reordering is globally disabled.
   SET_DEFAULT(disableInstructionReordering, false);
@@ -116,9 +116,6 @@ DefaultJitOptions::DefaultJitOptions() {
 
   // Toggles whether we verify that we don't recompile with the same CacheIR.
   SET_DEFAULT(disableBailoutLoopCheck, false);
-
-  // Whether we use scalar replacement instead of the old arguments analysis.
-  SET_DEFAULT(scalarReplaceArguments, false);
 
   // Whether the Baseline Interpreter is enabled.
   SET_DEFAULT(baselineInterpreter, true);

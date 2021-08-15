@@ -633,12 +633,7 @@ bool LazyStubSegment::addStubs(size_t codeLength,
     codeRanges_.back().offsetBy(offsetInSegment);
     i++;
 
-    if (funcExports[funcExportIndex].funcType().hasUnexposableArgOrRet()) {
-      continue;
-    }
-    if (funcExports[funcExportIndex]
-            .funcType()
-            .temporarilyUnsupportedReftypeForEntry()) {
+    if (!funcExports[funcExportIndex].canHaveJitEntry()) {
       continue;
     }
 
@@ -696,11 +691,8 @@ bool LazyStubTier::createMany(const Uint32Vector& funcExportIndices,
   DebugOnly<uint32_t> numExpectedRanges = 0;
   for (uint32_t funcExportIndex : funcExportIndices) {
     const FuncExport& fe = funcExports[funcExportIndex];
-    // Entries with unsupported types get only the interp exit
-    bool unsupportedType =
-        fe.funcType().hasUnexposableArgOrRet() ||
-        fe.funcType().temporarilyUnsupportedReftypeForEntry();
-    numExpectedRanges += (unsupportedType ? 1 : 2);
+    // Exports that don't support a jit entry get only the interp entry.
+    numExpectedRanges += (fe.canHaveJitEntry() ? 2 : 1);
     void* calleePtr =
         moduleSegmentBase + metadata.codeRange(fe).funcUncheckedCallEntry();
     Maybe<ImmPtr> callee;
@@ -792,12 +784,8 @@ bool LazyStubTier::createMany(const Uint32Vector& funcExportIndices,
     MOZ_ALWAYS_TRUE(
         exports_.insert(exports_.begin() + exportIndex, std::move(lazyExport)));
 
-    // Functions with unsupported types in their sig have only one entry
-    // (interp).  All other functions get an extra jit entry.
-    bool unsupportedType =
-        fe.funcType().hasUnexposableArgOrRet() ||
-        fe.funcType().temporarilyUnsupportedReftypeForEntry();
-    interpRangeIndex += (unsupportedType ? 1 : 2);
+    // Exports that don't support a jit entry get only the interp entry.
+    interpRangeIndex += (fe.canHaveJitEntry() ? 2 : 1);
   }
 
   return true;
@@ -824,16 +812,8 @@ bool LazyStubTier::createOne(uint32_t funcExportIndex,
   const UniqueLazyStubSegment& segment = stubSegments_[stubSegmentIndex];
   const CodeRangeVector& codeRanges = segment->codeRanges();
 
-  // Functions that have unsupported types in their sig don't get a jit
-  // entry.
-  if (codeTier.metadata()
-          .funcExports[funcExportIndex]
-          .funcType()
-          .temporarilyUnsupportedReftypeForEntry() ||
-      codeTier.metadata()
-          .funcExports[funcExportIndex]
-          .funcType()
-          .hasUnexposableArgOrRet()) {
+  // Exports that don't support a jit entry get only the interp entry.
+  if (!codeTier.metadata().funcExports[funcExportIndex].canHaveJitEntry()) {
     MOZ_ASSERT(codeRanges.length() >= 1);
     MOZ_ASSERT(codeRanges.back().isInterpEntry());
     return true;
@@ -954,7 +934,7 @@ bool MetadataTier::clone(const MetadataTier& src) {
 
 size_t Metadata::serializedSize() const {
   return sizeof(pod()) + SerializedVectorSize(types) +
-         SerializedPodVectorSize(globals) + SerializedPodVectorSize(tables) +
+         SerializedVectorSize(globals) + SerializedPodVectorSize(tables) +
 #ifdef ENABLE_WASM_EXCEPTIONS
          SerializedPodVectorSize(events) +
 #endif
@@ -967,7 +947,7 @@ uint8_t* Metadata::serialize(uint8_t* cursor) const {
              debugFuncReturnTypes.empty());
   cursor = WriteBytes(cursor, &pod(), sizeof(pod()));
   cursor = SerializeVector(cursor, types);
-  cursor = SerializePodVector(cursor, globals);
+  cursor = SerializeVector(cursor, globals);
   cursor = SerializePodVector(cursor, tables);
 #ifdef ENABLE_WASM_EXCEPTIONS
   cursor = SerializePodVector(cursor, events);
@@ -982,7 +962,7 @@ uint8_t* Metadata::serialize(uint8_t* cursor) const {
 /* static */ const uint8_t* Metadata::deserialize(const uint8_t* cursor) {
   (cursor = ReadBytes(cursor, &pod(), sizeof(pod()))) &&
       (cursor = DeserializeVector(cursor, &types)) &&
-      (cursor = DeserializePodVector(cursor, &globals)) &&
+      (cursor = DeserializeVector(cursor, &globals)) &&
       (cursor = DeserializePodVector(cursor, &tables)) &&
 #ifdef ENABLE_WASM_EXCEPTIONS
       (cursor = DeserializePodVector(cursor, &events)) &&

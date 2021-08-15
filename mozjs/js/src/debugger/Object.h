@@ -108,9 +108,12 @@ class DebuggerObject : public NativeObject {
   [[nodiscard]] static bool getOwnPropertySymbols(
       JSContext* cx, HandleDebuggerObject object,
       MutableHandle<IdVector> result);
+  [[nodiscard]] static bool getOwnPrivateProperties(
+      JSContext* cx, HandleDebuggerObject object,
+      MutableHandle<IdVector> result);
   [[nodiscard]] static bool getOwnPropertyDescriptor(
       JSContext* cx, HandleDebuggerObject object, HandleId id,
-      MutableHandle<PropertyDescriptor> desc);
+      MutableHandle<mozilla::Maybe<PropertyDescriptor>> desc);
   [[nodiscard]] static bool preventExtensions(JSContext* cx,
                                               HandleDebuggerObject object);
   [[nodiscard]] static bool seal(JSContext* cx, HandleDebuggerObject object);

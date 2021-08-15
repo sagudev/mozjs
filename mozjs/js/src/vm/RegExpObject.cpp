@@ -74,7 +74,7 @@ RegExpObject* js::RegExpAlloc(JSContext* cx, NewObjectKind newKind,
 
   regexp->clearShared();
 
-  if (!EmptyShape::ensureInitialCustomShape<RegExpObject>(cx, regexp)) {
+  if (!SharedShape::ensureInitialCustomShape<RegExpObject>(cx, regexp)) {
     return nullptr;
   }
 
@@ -265,8 +265,13 @@ Shape* RegExpObject::assignInitialShape(JSContext* cx,
   static_assert(LAST_INDEX_SLOT == 0);
 
   /* The lastIndex property alone is writable but non-configurable. */
-  return NativeObject::addDataProperty(cx, self, cx->names().lastIndex,
-                                       LAST_INDEX_SLOT, JSPROP_PERMANENT);
+  if (!NativeObject::addPropertyInReservedSlot(cx, self, cx->names().lastIndex,
+                                               LAST_INDEX_SLOT,
+                                               {PropertyFlag::Writable})) {
+    return nullptr;
+  }
+
+  return self->shape();
 }
 
 void RegExpObject::initIgnoringLastIndex(JSAtom* source, RegExpFlags flags) {
@@ -664,8 +669,15 @@ RegExpRunStatus RegExpShared::execute(JSContext* cx,
   uint32_t interruptRetries = 0;
   const uint32_t maxInterruptRetries = 4;
   do {
+    DebugOnly<bool> alreadyThrowing = cx->isExceptionPending();
     RegExpRunStatus result = irregexp::Execute(cx, re, input, start, matches);
-
+#ifdef DEBUG
+    // Check if we must simulate the interruption
+    if (js::irregexp::IsolateShouldSimulateInterrupt(cx->isolate)) {
+      js::irregexp::IsolateClearShouldSimulateInterrupt(cx->isolate);
+      cx->requestInterrupt(InterruptReason::CallbackUrgent);
+    }
+#endif
     if (result == RegExpRunStatus_Error) {
       /* Execute can return RegExpRunStatus_Error:
        *
@@ -677,6 +689,14 @@ RegExpRunStatus RegExpShared::execute(JSContext* cx,
        * third case, we want to handle the interrupt and try again.
        * We cap the number of times we will retry.
        */
+      if (cx->isExceptionPending()) {
+        // If this regexp is being executed by recovery instructions
+        // while bailing out to handle an exception, there may already
+        // be an exception pending. If so, just return that exception
+        // instead of reporting a new one.
+        MOZ_ASSERT(alreadyThrowing);
+        return RegExpRunStatus_Error;
+      }
       if (cx->hasAnyPendingInterrupt()) {
         if (!CheckForInterrupt(cx)) {
           return RegExpRunStatus_Error;
@@ -884,7 +904,7 @@ ArrayObject* RegExpRealm::createMatchResultTemplateObject(
                                   groupsVal, JSPROP_ENUMERATE)) {
       return nullptr;
     }
-    MOZ_ASSERT(templateObject->lastProperty()->slot() == IndicesGroupsSlot);
+    MOZ_ASSERT(templateObject->getLastProperty().slot() == IndicesGroupsSlot);
 
     matchResultTemplateObjects_[kind].set(templateObject);
     return matchResultTemplateObjects_[kind];
@@ -896,7 +916,7 @@ ArrayObject* RegExpRealm::createMatchResultTemplateObject(
                                 JSPROP_ENUMERATE)) {
     return nullptr;
   }
-  MOZ_ASSERT(templateObject->lastProperty()->slot() ==
+  MOZ_ASSERT(templateObject->getLastProperty().slot() ==
              MatchResultObjectIndexSlot);
 
   /* Set dummy input property */
@@ -905,7 +925,7 @@ ArrayObject* RegExpRealm::createMatchResultTemplateObject(
                                 JSPROP_ENUMERATE)) {
     return nullptr;
   }
-  MOZ_ASSERT(templateObject->lastProperty()->slot() ==
+  MOZ_ASSERT(templateObject->getLastProperty().slot() ==
              MatchResultObjectInputSlot);
 
   /* Set dummy groups property */
@@ -914,7 +934,7 @@ ArrayObject* RegExpRealm::createMatchResultTemplateObject(
                                 groupsVal, JSPROP_ENUMERATE)) {
     return nullptr;
   }
-  MOZ_ASSERT(templateObject->lastProperty()->slot() ==
+  MOZ_ASSERT(templateObject->getLastProperty().slot() ==
              MatchResultObjectGroupsSlot);
 
   if (kind == ResultTemplateKind::WithIndices) {
@@ -924,7 +944,7 @@ ArrayObject* RegExpRealm::createMatchResultTemplateObject(
                                   indicesVal, JSPROP_ENUMERATE)) {
       return nullptr;
     }
-    MOZ_ASSERT(templateObject->lastProperty()->slot() ==
+    MOZ_ASSERT(templateObject->getLastProperty().slot() ==
                MatchResultObjectIndicesSlot);
   }
 
@@ -974,8 +994,9 @@ RegExpShared* RegExpZone::get(JSContext* cx, HandleAtom source,
   return shared;
 }
 
-size_t RegExpZone::sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) {
-  return set_.sizeOfExcludingThis(mallocSizeOf);
+size_t RegExpZone::sizeOfIncludingThis(
+    mozilla::MallocSizeOf mallocSizeOf) const {
+  return mallocSizeOf(this) + set_.sizeOfExcludingThis(mallocSizeOf);
 }
 
 RegExpZone::RegExpZone(Zone* zone) : set_(zone, zone) {}
@@ -993,9 +1014,7 @@ JSObject* js::CloneRegExpObject(JSContext* cx, Handle<RegExpObject*> regex) {
 
   clone->clearShared();
 
-  if (!EmptyShape::ensureInitialCustomShape<RegExpObject>(cx, clone)) {
-    return nullptr;
-  }
+  clone->setShape(regex->shape());
 
   RegExpShared* shared = RegExpObject::getShared(cx, regex);
   if (!shared) {
@@ -1193,7 +1212,7 @@ JS_PUBLIC_API bool JS::ClearRegExpStatics(JSContext* cx, HandleObject obj) {
 }
 
 JS_PUBLIC_API bool JS::ExecuteRegExp(JSContext* cx, HandleObject obj,
-                                     HandleObject reobj, char16_t* chars,
+                                     HandleObject reobj, const char16_t* chars,
                                      size_t length, size_t* indexp, bool test,
                                      MutableHandleValue rval) {
   AssertHeapIsIdle();

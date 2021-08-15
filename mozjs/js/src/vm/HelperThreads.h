@@ -79,6 +79,10 @@ void DestroyHelperThreadsState();
 // Initialize helper threads unless already initialized.
 bool EnsureHelperThreadsInitialized();
 
+size_t GetHelperThreadCount();
+size_t GetHelperThreadCPUCount();
+size_t GetMaxWasmCompilationThreads();
+
 // This allows the JS shell to override GetCPUCount() when passed the
 // --thread-count=N option.
 bool SetFakeCPUCount(size_t count);
@@ -199,6 +203,15 @@ JS::OffThreadToken* StartOffThreadParseScript(
     JS::SourceText<char16_t>& srcBuf, JS::OffThreadCompileCallback callback,
     void* callbackData);
 JS::OffThreadToken* StartOffThreadParseScript(
+    JSContext* cx, const JS::ReadOnlyCompileOptions& options,
+    JS::SourceText<mozilla::Utf8Unit>& srcBuf,
+    JS::OffThreadCompileCallback callback, void* callbackData);
+
+JS::OffThreadToken* StartOffThreadCompileToStencil(
+    JSContext* cx, const JS::ReadOnlyCompileOptions& options,
+    JS::SourceText<char16_t>& srcBuf, JS::OffThreadCompileCallback callback,
+    void* callbackData);
+JS::OffThreadToken* StartOffThreadCompileToStencil(
     JSContext* cx, const JS::ReadOnlyCompileOptions& options,
     JS::SourceText<mozilla::Utf8Unit>& srcBuf,
     JS::OffThreadCompileCallback callback, void* callbackData);

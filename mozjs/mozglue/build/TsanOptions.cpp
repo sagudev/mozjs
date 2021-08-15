@@ -73,7 +73,10 @@ extern "C" const char* __tsan_default_suppressions() {
          // This is likely a false positive involving a mutex from GTK.
          // See also bug 1642653 - permanent.
          "mutex:GetMaiAtkType\n"
-
+         // Bug 1688716 - Failure due to fire_glxtest_process
+         // calling into uninstrumented external graphics driver code.
+         // For example: iris_dri.so and swrast_dri.so.
+         "race:fire_glxtest_process\n"
 
 
 
@@ -273,10 +276,6 @@ extern "C" const char* __tsan_default_suppressions() {
          // Bug 1683417
          "race:DataChannelConnection::SetSignals\n"
          "race:DataChannelConnection::SetReady\n"
-
-         // Bug 1683404
-         "race:nsTimerImpl::Shutdown\n"
-         "race:nsTimerImpl::CancelImpl\n"
 
          // Bug 1682951
          "race:storage::Connection::Release\n"

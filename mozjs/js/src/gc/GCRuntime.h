@@ -12,8 +12,6 @@
 #include "mozilla/Maybe.h"
 #include "mozilla/TimeStamp.h"
 
-#include "jsfriendapi.h"  // For PerformanceHint
-
 #include "gc/ArenaList.h"
 #include "gc/AtomMarking.h"
 #include "gc/GCMarker.h"
@@ -22,6 +20,7 @@
 #include "gc/Scheduling.h"
 #include "gc/Statistics.h"
 #include "gc/StoreBuffer.h"
+#include "js/friend/PerformanceHint.h"
 #include "js/GCAnnotations.h"
 #include "js/UniquePtr.h"
 #include "vm/AtomsTable.h"
@@ -266,6 +265,8 @@ class BarrierTracer final : public GenericTracer {
   JSString* onStringEdge(JSString* string) override;
   js::BaseScript* onScriptEdge(js::BaseScript* script) override;
   BaseShape* onBaseShapeEdge(BaseShape* base) override;
+  GetterSetter* onGetterSetterEdge(GetterSetter* gs) override;
+  PropMap* onPropMapEdge(PropMap* map) override;
   Scope* onScopeEdge(Scope* scope) override;
   RegExpShared* onRegExpSharedEdge(RegExpShared* shared) override;
   BigInt* onBigIntEdge(BigInt* bi) override;
@@ -330,13 +331,12 @@ class GCRuntime {
                               const HeapThreshold& threshold);
   // The return value indicates whether a major GC was performed.
   bool gcIfRequested();
-  void gc(JSGCInvocationKind gckind, JS::GCReason reason);
-  void startGC(JSGCInvocationKind gckind, JS::GCReason reason,
-               int64_t millis = 0);
+  void gc(JS::GCOptions options, JS::GCReason reason);
+  void startGC(JS::GCOptions options, JS::GCReason reason, int64_t millis = 0);
   void gcSlice(JS::GCReason reason, int64_t millis = 0);
   void finishGC(JS::GCReason reason);
   void abortGC();
-  void startDebugGC(JSGCInvocationKind gckind, SliceBudget& budget);
+  void startDebugGC(JS::GCOptions options, SliceBudget& budget);
   void debugGCSlice(SliceBudget& budget);
 
   void triggerFullGCForAtoms(JSContext* cx);
@@ -443,7 +443,7 @@ class GCRuntime {
 
   bool isCompactingGCEnabled() const;
 
-  bool isShrinkingGC() const { return invocationKind == GC_SHRINK; }
+  bool isShrinkingGC() const { return gcOptions == JS::GCOptions::Shrink; }
 
   bool initSweepActions();
 
@@ -583,15 +583,13 @@ class GCRuntime {
   // Public here for ReleaseArenaLists and FinalizeTypedArenas.
   void releaseArena(Arena* arena, const AutoLockGC& lock);
 
-  void releaseHeldRelocatedArenas();
-  void releaseHeldRelocatedArenasWithoutUnlocking(const AutoLockGC& lock);
-
   // Allocator
   template <AllowGC allowGC>
   [[nodiscard]] bool checkAllocatorState(JSContext* cx, AllocKind kind);
   template <AllowGC allowGC>
   JSObject* tryNewNurseryObject(JSContext* cx, size_t thingSize,
-                                size_t nDynamicSlots, const JSClass* clasp);
+                                size_t nDynamicSlots, const JSClass* clasp,
+                                AllocSite* site);
   template <AllowGC allowGC>
   static JSObject* tryNewTenuredObject(JSContext* cx, AllocKind kind,
                                        size_t thingSize, size_t nDynamicSlots);
@@ -691,10 +689,10 @@ class GCRuntime {
 
   gcstats::ZoneGCStats scanZonesBeforeGC();
 
-  using MaybeInvocationKind = mozilla::Maybe<JSGCInvocationKind>;
+  using MaybeGCOptions = mozilla::Maybe<JS::GCOptions>;
 
   void collect(bool nonincrementalByAPI, const SliceBudget& budget,
-               const MaybeInvocationKind& gckind,
+               const MaybeGCOptions& options,
                JS::GCReason reason) JS_HAZ_GC_CALL;
 
   /*
@@ -708,18 +706,18 @@ class GCRuntime {
    */
   [[nodiscard]] IncrementalResult gcCycle(bool nonincrementalByAPI,
                                           const SliceBudget& budgetArg,
-                                          const MaybeInvocationKind& gckind,
+                                          const MaybeGCOptions& options,
                                           JS::GCReason reason);
   bool shouldRepeatForDeadZone(JS::GCReason reason);
 
-  void incrementalSlice(SliceBudget& budget, const MaybeInvocationKind& gckind,
+  void incrementalSlice(SliceBudget& budget, const MaybeGCOptions& options,
                         JS::GCReason reason);
 
   void waitForBackgroundTasksBeforeSlice();
   bool mightSweepInThisSlice(bool nonIncremental);
-  void collectNurseryFromMajorGC(const MaybeInvocationKind& gckind,
+  void collectNurseryFromMajorGC(const MaybeGCOptions& options,
                                  JS::GCReason reason);
-  void collectNursery(JSGCInvocationKind kind, JS::GCReason reason,
+  void collectNursery(JS::GCOptions options, JS::GCReason reason,
                       gcstats::PhaseKind phase);
 
   friend class AutoCallGCCallbacks;
@@ -735,11 +733,12 @@ class GCRuntime {
   void beginMarkPhase(AutoGCSession& session);
   bool shouldPreserveJITCode(JS::Realm* realm,
                              const mozilla::TimeStamp& currentTime,
-                             JS::GCReason reason, bool canAllocateMoreCode);
+                             JS::GCReason reason, bool canAllocateMoreCode,
+                             bool isActiveCompartment);
   void discardJITCodeForGC();
   void startBackgroundFreeAfterMinorGC();
   void relazifyFunctionsForShrinkingGC();
-  void purgeShapeCachesForShrinkingGC();
+  void purgePropMapTablesForShrinkingGC();
   void purgeSourceURLsForShrinkingGC();
   void traceRuntimeForMajorGC(JSTracer* trc, AutoGCSession& session);
   void traceRuntimeAtoms(JSTracer* trc, const AutoAccessAtomsZone& atomsAccess);
@@ -795,7 +794,7 @@ class GCRuntime {
   IncrementalProgress sweepAtomsTable(JSFreeOp* fop, SliceBudget& budget);
   IncrementalProgress sweepWeakCaches(JSFreeOp* fop, SliceBudget& budget);
   IncrementalProgress finalizeAllocKind(JSFreeOp* fop, SliceBudget& budget);
-  IncrementalProgress sweepShapeTree(JSFreeOp* fop, SliceBudget& budget);
+  IncrementalProgress sweepPropMapTree(JSFreeOp* fop, SliceBudget& budget);
   void endSweepPhase(bool lastGC);
   bool allCCVisibleZonesWereCollected();
   void sweepZones(JSFreeOp* fop, bool destroyingRuntime);
@@ -824,8 +823,6 @@ class GCRuntime {
   void updateAllCellPointers(MovingTracer* trc, Zone* zone);
   void updateZonePointersToRelocatedCells(Zone* zone);
   void updateRuntimePointersToRelocatedCells(AutoGCSession& session);
-  void protectAndHoldArenas(Arena* arenaList);
-  void unprotectHeldRelocatedArenas();
   void clearRelocatedArenas(Arena* arenaList, JS::GCReason reason);
   void clearRelocatedArenasWithoutUnlocking(Arena* arenaList,
                                             JS::GCReason reason,
@@ -833,6 +830,13 @@ class GCRuntime {
   void releaseRelocatedArenas(Arena* arenaList);
   void releaseRelocatedArenasWithoutUnlocking(Arena* arenaList,
                                               const AutoLockGC& lock);
+#ifdef DEBUG
+  void protectOrReleaseRelocatedArenas(Arena* arenaList, JS::GCReason reason);
+  void protectAndHoldArenas(Arena* arenaList);
+  void unprotectHeldRelocatedArenas(const AutoLockGC& lock);
+  void releaseHeldRelocatedArenas();
+  void releaseHeldRelocatedArenasWithoutUnlocking(const AutoLockGC& lock);
+#endif
 
   /*
    * Whether to immediately trigger a slice after a background task
@@ -851,7 +855,7 @@ class GCRuntime {
   void maybeRequestGCAfterBackgroundTask(const AutoLockHelperThreadState& lock);
   void cancelRequestedGCAfterBackgroundTask();
   void finishCollection();
-  void maybeStopStringPretenuring();
+  void maybeStopPretenuring();
   void checkGCStateNotInUse();
   IncrementalProgress joinBackgroundMarkTask();
 
@@ -1023,7 +1027,7 @@ class GCRuntime {
   MainThreadData<bool> isCompacting;
 
   /* The invocation kind of the current GC, taken from the first slice. */
-  MainThreadOrGCTaskData<JSGCInvocationKind> invocationKind;
+  MainThreadOrGCTaskData<JS::GCOptions> gcOptions;
 
   /* The initial GC reason, taken from the first slice. */
   MainThreadData<JS::GCReason> initialReason;
@@ -1111,8 +1115,10 @@ class GCRuntime {
    */
   MainThreadData<bool> startedCompacting;
   MainThreadData<ZoneList> zonesToMaybeCompact;
-  MainThreadData<Arena*> relocatedArenasToRelease;
   MainThreadData<size_t> zonesCompacted;
+#ifdef DEBUG
+  GCLockData<Arena*> relocatedArenasToRelease;
+#endif
 
 #ifdef JS_GC_ZEAL
   MainThreadData<MarkingValidator*> markingValidator;
@@ -1297,7 +1303,7 @@ inline bool GCRuntime::hasIncrementalTwoSliceZealMode() {
          hasZealMode(ZealMode::YieldBeforeSweepingCaches) ||
          hasZealMode(ZealMode::YieldBeforeSweepingObjects) ||
          hasZealMode(ZealMode::YieldBeforeSweepingNonObjects) ||
-         hasZealMode(ZealMode::YieldBeforeSweepingShapeTrees) ||
+         hasZealMode(ZealMode::YieldBeforeSweepingPropMapTrees) ||
          hasZealMode(ZealMode::YieldWhileGrayMarking);
 }
 

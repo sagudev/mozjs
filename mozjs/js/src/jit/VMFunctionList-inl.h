@@ -20,7 +20,6 @@
 #include "vm/AsyncIteration.h"
 #include "vm/BigIntType.h"
 #include "vm/EqualityOperations.h"
-#include "vm/Instrumentation.h"
 #include "vm/Interpreter.h"
 #include "vm/TypedArrayObject.h"
 
@@ -97,6 +96,8 @@ namespace jit {
   _(CheckOverRecursed, js::jit::CheckOverRecursed)                             \
   _(CheckOverRecursedBaseline, js::jit::CheckOverRecursedBaseline)             \
   _(CheckPrivateFieldOperation, js::CheckPrivateFieldOperation)                \
+  _(ClassBodyLexicalEnvironmentObjectCreate,                                   \
+    js::ClassBodyLexicalEnvironmentObject::create)                             \
   _(CloneRegExpObject, js::CloneRegExpObject)                                  \
   _(ConcatStrings, js::ConcatStrings<CanGC>)                                   \
   _(CopyLexicalEnvironmentObject, js::jit::CopyLexicalEnvironmentObject)       \
@@ -150,9 +151,6 @@ namespace jit {
   _(InitFunctionEnvironmentObjects, js::jit::InitFunctionEnvironmentObjects)   \
   _(InitPropGetterSetterOperation, js::InitPropGetterSetterOperation)          \
   _(InitRestParameter, js::jit::InitRestParameter)                             \
-  _(InstrumentationActiveOperation, js::InstrumentationActiveOperation)        \
-  _(InstrumentationCallbackOperation, js::InstrumentationCallbackOperation)    \
-  _(InstrumentationScriptIdOperation, js::InstrumentationScriptIdOperation)    \
   _(Int32ToString, js::Int32ToString<CanGC>)                                   \
   _(InterpretResume, js::jit::InterpretResume)                                 \
   _(InterruptCheck, js::jit::InterruptCheck)                                   \
@@ -181,17 +179,22 @@ namespace jit {
   _(Lambda, js::Lambda)                                                        \
   _(LambdaArrow, js::LambdaArrow)                                              \
   _(LeaveWith, js::jit::LeaveWith)                                             \
+  _(LoadAliasedDebugVar, js::LoadAliasedDebugVar)                              \
   _(MutatePrototype, js::jit::MutatePrototype)                                 \
   _(NamedLambdaObjectCreateTemplateObject,                                     \
     js::NamedLambdaObject::createTemplateObject)                               \
   _(NativeGetElement, js::NativeGetElement)                                    \
   _(NewArgumentsObject, js::jit::NewArgumentsObject)                           \
   _(NewArrayIterator, js::NewArrayIterator)                                    \
+  _(NewArrayObjectBaselineFallback, js::NewArrayObjectBaselineFallback)        \
+  _(NewArrayObjectOptimzedFallback, js::NewArrayObjectOptimizedFallback)       \
   _(NewArrayOperation, js::NewArrayOperation)                                  \
   _(NewArrayWithShape, js::NewArrayWithShape)                                  \
   _(NewCallObject, js::jit::NewCallObject)                                     \
   _(NewObjectOperation, js::NewObjectOperation)                                \
   _(NewObjectOperationWithTemplate, js::NewObjectOperationWithTemplate)        \
+  _(NewPlainObjectBaselineFallback, js::NewPlainObjectBaselineFallback)        \
+  _(NewPlainObjectOptimizedFallback, js::NewPlainObjectOptimizedFallback)      \
   _(NewRegExpStringIterator, js::NewRegExpStringIterator)                      \
   _(NewStringIterator, js::NewStringIterator)                                  \
   _(NewStringObject, js::jit::NewStringObject)                                 \
@@ -214,12 +217,14 @@ namespace jit {
   _(ProxyHasOwn, js::ProxyHasOwn)                                              \
   _(ProxySetProperty, js::ProxySetProperty)                                    \
   _(ProxySetPropertyByValue, js::ProxySetPropertyByValue)                      \
+  _(PushClassBodyEnv, js::jit::PushClassBodyEnv)                               \
   _(PushLexicalEnv, js::jit::PushLexicalEnv)                                   \
   _(PushVarEnv, js::jit::PushVarEnv)                                           \
   _(RecreateLexicalEnv, js::jit::RecreateLexicalEnv)                           \
   _(RegExpMatcherRaw, js::RegExpMatcherRaw)                                    \
   _(RegExpSearcherRaw, js::RegExpSearcherRaw)                                  \
   _(RegExpTesterRaw, js::RegExpTesterRaw)                                      \
+  _(SameValue, js::SameValue)                                                  \
   _(SetArrayLength, js::jit::SetArrayLength)                                   \
   _(SetDenseElement, js::jit::SetDenseElement)                                 \
   _(SetFunctionName, js::SetFunctionName)                                      \

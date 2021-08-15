@@ -25,6 +25,7 @@
 
 #include <algorithm>
 
+#include "ds/IdValuePair.h"  // js::IdValuePair
 #include "gc/FreeOp.h"
 #include "jit/AtomicOperations.h"
 #include "jit/JitOptions.h"
@@ -75,20 +76,10 @@ using mozilla::Nothing;
 using mozilla::RangedPtr;
 using mozilla::Span;
 
-extern mozilla::Atomic<bool> fuzzingSafe;
-
 // About the fuzzer intercession points: If fuzzing has been selected and only a
 // single compiler has been selected then we will disable features that are not
 // supported by that single compiler.  This is strictly a concession to the
 // fuzzer infrastructure.
-
-static inline bool IsFuzzing() {
-#ifdef FUZZING
-  return true;
-#else
-  return fuzzingSafe;
-#endif
-}
 
 static inline bool IsFuzzingIon(JSContext* cx) {
   return IsFuzzing() && !cx->options().wasmBaseline() &&
@@ -103,58 +94,9 @@ static inline bool IsFuzzingCranelift(JSContext* cx) {
 // These functions read flags and apply fuzzing intercession policies.  Never go
 // directly to the flags in code below, always go via these accessors.
 
-static inline bool WasmMultiValueFlag(JSContext* cx) {
-#ifdef ENABLE_WASM_MULTI_VALUE
-  return cx->options().wasmMultiValue();
-#else
-  return false;
-#endif
-}
-
-static inline bool WasmSimdFlag(JSContext* cx) {
-#ifdef ENABLE_WASM_SIMD
-  if (IsFuzzingCranelift(cx)) {
-    return false;
-  }
-  return cx->options().wasmSimd() && js::jit::JitSupportsWasmSimd();
-#else
-  return false;
-#endif
-}
-
 static inline bool WasmSimdWormholeFlag(JSContext* cx) {
 #ifdef ENABLE_WASM_SIMD_WORMHOLE
   return cx->options().wasmSimdWormhole();
-#else
-  return false;
-#endif
-}
-
-static inline bool WasmReftypesFlag(JSContext* cx) {
-#ifdef ENABLE_WASM_REFTYPES
-  return cx->options().wasmReftypes();
-#else
-  return false;
-#endif
-}
-
-static inline bool WasmFunctionReferencesFlag(JSContext* cx) {
-  if (IsFuzzingIon(cx) || IsFuzzingCranelift(cx)) {
-    return false;
-  }
-#ifdef ENABLE_WASM_FUNCTION_REFERENCES
-  return WasmReftypesFlag(cx) && cx->options().wasmFunctionReferences();
-#else
-  return false;
-#endif
-}
-
-static inline bool WasmGcFlag(JSContext* cx) {
-  if (IsFuzzingIon(cx) || IsFuzzingCranelift(cx)) {
-    return false;
-  }
-#ifdef ENABLE_WASM_GC
-  return WasmFunctionReferencesFlag(cx) && cx->options().wasmGc();
 #else
   return false;
 #endif
@@ -165,13 +107,13 @@ static inline bool WasmThreadsFlag(JSContext* cx) {
          cx->realm()->creationOptions().getSharedMemoryAndAtomicsEnabled();
 }
 
-static inline bool WasmExceptionsFlag(JSContext* cx) {
-#ifdef ENABLE_WASM_EXCEPTIONS
-  return cx->options().wasmExceptions();
-#else
-  return false;
-#endif
-}
+#define WASM_FEATURE(NAME, LOWER_NAME, COMPILE_PRED, COMPILER_PRED, FLAG_PRED, \
+                     ...)                                                      \
+  static inline bool Wasm##NAME##Flag(JSContext* cx) {                         \
+    return (COMPILE_PRED) && (FLAG_PRED) && cx->options().wasm##NAME();        \
+  }
+JS_FOR_WASM_FEATURES(WASM_FEATURE, WASM_FEATURE);
+#undef WASM_FEATURE
 
 static inline bool WasmDebuggerActive(JSContext* cx) {
   if (IsFuzzingIon(cx) || IsFuzzingCranelift(cx)) {
@@ -292,6 +234,11 @@ bool wasm::IonAvailable(JSContext* cx) {
   return !isDisabled && !CraneliftAvailable(cx);
 }
 
+bool wasm::WasmCompilerForAsmJSAvailable(JSContext* cx) {
+  // For now, restrict this to Ion - we have not tested Cranelift properly.
+  return IonAvailable(cx);
+}
+
 template <size_t ArrayLength>
 static inline bool Append(JSStringBuilder* reason, const char (&s)[ArrayLength],
                           char* sep) {
@@ -386,29 +333,13 @@ bool wasm::AnyCompilerAvailable(JSContext* cx) {
 // compiler that can support the feature.  Subsequent compiler selection must
 // ensure that only compilers that actually support the feature are used.
 
-bool wasm::ReftypesAvailable(JSContext* cx) {
-  // All compilers support reference types.
-  return WasmReftypesFlag(cx) && AnyCompilerAvailable(cx);
-}
-
-bool wasm::FunctionReferencesAvailable(JSContext* cx) {
-  // Cranelift and Ion do not support function-references.
-  return WasmFunctionReferencesFlag(cx) && BaselineAvailable(cx);
-}
-
-bool wasm::GcTypesAvailable(JSContext* cx) {
-  // Cranelift and Ion do not support GC.
-  return WasmGcFlag(cx) && BaselineAvailable(cx);
-}
-
-bool wasm::MultiValuesAvailable(JSContext* cx) {
-  return WasmMultiValueFlag(cx) && AnyCompilerAvailable(cx);
-}
-
-bool wasm::SimdAvailable(JSContext* cx) {
-  return WasmSimdFlag(cx) &&
-         (BaselineAvailable(cx) || IonAvailable(cx) || CraneliftAvailable(cx));
-}
+#define WASM_FEATURE(NAME, LOWER_NAME, COMPILE_PRED, COMPILER_PRED, FLAG_PRED, \
+                     ...)                                                      \
+  bool wasm::NAME##Available(JSContext* cx) {                                  \
+    return Wasm##NAME##Flag(cx) && (COMPILER_PRED);                            \
+  }
+JS_FOR_WASM_FEATURES(WASM_FEATURE, WASM_FEATURE)
+#undef WASM_FEATURE
 
 #ifdef ENABLE_WASM_SIMD_WORMHOLE
 static bool IsSimdPrivilegedContext(JSContext* cx) {
@@ -442,15 +373,8 @@ bool wasm::ThreadsAvailable(JSContext* cx) {
   return WasmThreadsFlag(cx) && AnyCompilerAvailable(cx);
 }
 
-bool wasm::ExceptionsAvailable(JSContext* cx) {
-  // Ion & Cranelift do not support Exceptions (for now).
-  // Exceptions require multi-value.
-  return WasmExceptionsFlag(cx) && MultiValuesAvailable(cx) &&
-         BaselineAvailable(cx);
-}
-
 bool wasm::HasPlatformSupport(JSContext* cx) {
-#if !MOZ_LITTLE_ENDIAN() || defined(JS_CODEGEN_NONE)
+#if !MOZ_LITTLE_ENDIAN() || defined(JS_CODEGEN_NONE) || defined(__wasi__)
   return false;
 #endif
 
@@ -513,11 +437,18 @@ bool wasm::StreamingCompilationAvailable(JSContext* cx) {
 }
 
 bool wasm::CodeCachingAvailable(JSContext* cx) {
+  // Fuzzilli breaks the out-of-process compilation mechanism,
+  // so we disable it permanently in those builds.
+#ifdef FUZZING_JS_FUZZILLI
+  return false;
+#else
+
   // At the moment, we require Ion support for code caching.  The main reason
   // for this is that wasm::CompileAndSerialize() does not have access to
   // information about which optimizing compiler it should use.  See comments in
   // CompileAndSerialize(), below.
   return StreamingCompilationAvailable(cx) && IonAvailable(cx);
+#endif
 }
 
 // ============================================================================
@@ -786,7 +717,7 @@ bool wasm::Eval(JSContext* cx, Handle<TypedArrayObject*> code,
   }
 
   if (!bytecode->append((uint8_t*)code->dataPointerEither().unwrap(),
-                        code->byteLength().get())) {
+                        code->byteLength())) {
     ReportOutOfMemory(cx);
     return false;
   }
@@ -1458,8 +1389,8 @@ bool WasmModuleObject::customSections(JSContext* cx, unsigned argc, Value* vp) {
       return false;
     }
 
-    mozilla::Unused << JS::DeflateStringToUTF8Buffer(
-        linear, Span(name.begin(), name.length()));
+    (void)JS::DeflateStringToUTF8Buffer(linear,
+                                        Span(name.begin(), name.length()));
   }
 
   RootedValueVector elems(cx);
@@ -1472,7 +1403,7 @@ bool WasmModuleObject::customSections(JSContext* cx, unsigned argc, Value* vp) {
       continue;
     }
 
-    buf = ArrayBufferObject::createZeroed(cx, BufferSize(cs.payload->length()));
+    buf = ArrayBufferObject::createZeroed(cx, cs.payload->length());
     if (!buf) {
       return false;
     }
@@ -2433,17 +2364,15 @@ bool WasmMemoryObject::construct(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-  if (limits.initial > MaxMemory32Pages()) {
+  if (Pages(limits.initial) > MaxMemory32Pages()) {
     JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                              JSMSG_WASM_MEM_IMP_LIMIT);
     return false;
   }
-
-  ConvertMemoryPagesToBytes(&limits);
+  MemoryDesc memory(MemoryKind::Memory32, limits);
 
   RootedArrayBufferObjectMaybeShared buffer(cx);
-  if (!CreateWasmBuffer32(cx, limits.initial, limits.maximum,
-                          limits.shared == wasm::Shareable::True, &buffer)) {
+  if (!CreateWasmBuffer32(cx, memory, &buffer)) {
     return false;
   }
 
@@ -2477,14 +2406,13 @@ bool WasmMemoryObject::bufferGetterImpl(JSContext* cx, const CallArgs& args) {
   RootedArrayBufferObjectMaybeShared buffer(cx, &memoryObj->buffer());
 
   if (memoryObj->isShared()) {
-    size_t memoryLength = memoryObj->volatileMemoryLength().get();
-    MOZ_ASSERT(memoryLength >= buffer->byteLength().get());
+    size_t memoryLength = memoryObj->volatileMemoryLength();
+    MOZ_ASSERT(memoryLength >= buffer->byteLength());
 
-    if (memoryLength > buffer->byteLength().get()) {
+    if (memoryLength > buffer->byteLength()) {
       RootedSharedArrayBufferObject newBuffer(
-          cx,
-          SharedArrayBufferObject::New(cx, memoryObj->sharedArrayRawBuffer(),
-                                       BufferSize(memoryLength)));
+          cx, SharedArrayBufferObject::New(
+                  cx, memoryObj->sharedArrayRawBuffer(), memoryLength));
       if (!newBuffer) {
         return false;
       }
@@ -2572,17 +2500,17 @@ bool WasmMemoryObject::typeImpl(JSContext* cx, const CallArgs& args) {
       cx, &args.thisv().toObject().as<WasmMemoryObject>());
   Rooted<IdValueVector> props(cx, IdValueVector(cx));
 
-  Maybe<uint32_t> bufferMaxSize = memoryObj->buffer().wasmMaxSize();
-  if (bufferMaxSize.isSome()) {
-    uint32_t maximumPages = bufferMaxSize.value() / wasm::PageSize;
+  Maybe<Pages> maxPages = memoryObj->maxPages();
+  if (maxPages.isSome()) {
+    uint32_t maxPages32 = mozilla::AssertedCast<uint32_t>(maxPages->value());
     if (!props.append(IdValuePair(NameToId(cx->names().maximum),
-                                  Int32Value(maximumPages)))) {
+                                  Int32Value(maxPages32)))) {
       return false;
     }
   }
 
-  uint32_t minimumPages = mozilla::AssertedCast<uint32_t>(
-      memoryObj->volatileMemoryLength().get() / wasm::PageSize);
+  uint32_t minimumPages =
+      mozilla::AssertedCast<uint32_t>(memoryObj->volatilePages().value());
   if (!props.append(IdValuePair(NameToId(cx->names().minimum),
                                 Int32Value(minimumPages)))) {
     return false;
@@ -2608,11 +2536,25 @@ bool WasmMemoryObject::type(JSContext* cx, unsigned argc, Value* vp) {
 }
 #endif
 
-BufferSize WasmMemoryObject::volatileMemoryLength() const {
+size_t WasmMemoryObject::volatileMemoryLength() const {
   if (isShared()) {
     return sharedArrayRawBuffer()->volatileByteLength();
   }
   return buffer().byteLength();
+}
+
+wasm::Pages WasmMemoryObject::volatilePages() const {
+  if (isShared()) {
+    return sharedArrayRawBuffer()->volatileWasmPages();
+  }
+  return buffer().wasmPages();
+}
+
+Maybe<wasm::Pages> WasmMemoryObject::maxPages() const {
+  if (isShared()) {
+    return Some(sharedArrayRawBuffer()->wasmMaxPages());
+  }
+  return buffer().wasmMaxPages();
 }
 
 bool WasmMemoryObject::isShared() const {
@@ -2658,22 +2600,27 @@ bool WasmMemoryObject::isHuge() const {
 }
 
 bool WasmMemoryObject::movingGrowable() const {
-  return !isHuge() && !buffer().wasmMaxSize();
+  return !isHuge() && !buffer().wasmMaxPages();
 }
 
-BufferSize WasmMemoryObject::boundsCheckLimit() const {
+size_t WasmMemoryObject::boundsCheckLimit() const {
   if (!buffer().isWasm() || isHuge()) {
     return buffer().byteLength();
   }
   size_t mappedSize = buffer().wasmMappedSize();
-  // See clamping performed in CreateSpecificWasmBuffer()
+#if !defined(JS_64BIT) || defined(ENABLE_WASM_CRANELIFT)
+  // See clamping performed in CreateSpecificWasmBuffer().  On 32-bit systems
+  // and on 64-bit with Cranelift, we do not want to overflow a uint32_t.  For
+  // the other 64-bit compilers, all constraints are implied by the largest
+  // accepted value for a memory's max field.
   MOZ_ASSERT(mappedSize < UINT32_MAX);
+#endif
   MOZ_ASSERT(mappedSize % wasm::PageSize == 0);
   MOZ_ASSERT(mappedSize >= wasm::GuardSize);
   MOZ_ASSERT(wasm::IsValidBoundsCheckImmediate(mappedSize - wasm::GuardSize));
   size_t limit = mappedSize - wasm::GuardSize;
   MOZ_ASSERT(limit <= MaxMemory32BoundsCheckLimit());
-  return BufferSize(limit);
+  return limit;
 }
 
 bool WasmMemoryObject::addMovingGrowObserver(JSContext* cx,
@@ -2699,34 +2646,31 @@ uint32_t WasmMemoryObject::growShared(HandleWasmMemoryObject memory,
   SharedArrayRawBuffer* rawBuf = memory->sharedArrayRawBuffer();
   SharedArrayRawBuffer::Lock lock(rawBuf);
 
-  MOZ_ASSERT(rawBuf->volatileByteLength().get() % PageSize == 0);
-  uint32_t oldNumPages = rawBuf->volatileByteLength().get() / PageSize;
-
-  CheckedInt<uint32_t> newSize = oldNumPages;
-  newSize += delta;
-  newSize *= PageSize;
-  if (!newSize.isValid()) {
+  Pages oldNumPages = rawBuf->volatileWasmPages();
+  Pages newPages = oldNumPages;
+  if (!newPages.checkedIncrement(Pages(delta))) {
     return -1;
   }
 
   // Always check against the max here, do not rely on the buffer resizers to
   // use the correct limit, they don't have enough context.
-  if (newSize.value() > MaxMemory32Bytes()) {
+  if (newPages > MaxMemory32Pages()) {
     return -1;
   }
 
-  if (newSize.value() > rawBuf->maxSize()) {
+  if (newPages > rawBuf->wasmMaxPages()) {
     return -1;
   }
 
-  if (!rawBuf->wasmGrowToSizeInPlace(lock, BufferSize(newSize.value()))) {
+  if (!rawBuf->wasmGrowToPagesInPlace(lock, newPages)) {
     return -1;
   }
-
   // New buffer objects will be created lazily in all agents (including in
   // this agent) by bufferGetterImpl, above, so no more work to do here.
 
-  return oldNumPages;
+  // It is safe to cast to uint32_t, as oldNumPages was within our
+  // implementation limits of MaxMemory32Pages(), which is within uint32_t.
+  return uint32_t(oldNumPages.value());
 }
 
 /* static */
@@ -2738,27 +2682,25 @@ uint32_t WasmMemoryObject::grow(HandleWasmMemoryObject memory, uint32_t delta,
 
   RootedArrayBufferObject oldBuf(cx, &memory->buffer().as<ArrayBufferObject>());
 
-  MOZ_ASSERT(oldBuf->byteLength().get() % PageSize == 0);
-  uint32_t oldNumPages = oldBuf->byteLength().get() / PageSize;
-
-  // TODO (large ArrayBuffer): This does not allow 65536 pages.  See more
-  // information at the definition of MaxMemory32Bytes().
+#if !defined(JS_64BIT) || defined(ENABLE_WASM_CRANELIFT)
+  // TODO (large ArrayBuffer): For Cranelift, limit the memory size to something
+  // that fits in a uint32_t.  See more information at the definition of
+  // MaxMemory32Bytes().
   //
   // TODO: Turn this into a static_assert, if we are able to make
   // MaxMemory32Bytes() constexpr once the dust settles for the 4GB heaps.
-  MOZ_ASSERT(MaxMemory32Pages() <= UINT32_MAX / PageSize,
-             "Avoid 32-bit overflows");
+  MOZ_ASSERT(MaxMemory32Bytes() <= UINT32_MAX, "Avoid 32-bit overflows");
+#endif
 
-  CheckedInt<uint32_t> newSize = oldNumPages;
-  newSize += delta;
-  newSize *= PageSize;
-  if (!newSize.isValid()) {
+  Pages oldNumPages = oldBuf->wasmPages();
+  Pages newPages = oldNumPages;
+  if (!newPages.checkedIncrement(Pages(delta))) {
     return -1;
   }
 
   // Always check against the max here, do not rely on the buffer resizers to
   // use the correct limit, they don't have enough context.
-  if (newSize.value() > MaxMemory32Bytes()) {
+  if (newPages > MaxMemory32Pages()) {
     return -1;
   }
 
@@ -2766,19 +2708,19 @@ uint32_t WasmMemoryObject::grow(HandleWasmMemoryObject memory, uint32_t delta,
 
   if (memory->movingGrowable()) {
     MOZ_ASSERT(!memory->isHuge());
-    if (!ArrayBufferObject::wasmMovingGrowToSize(BufferSize(newSize.value()),
-                                                 oldBuf, &newBuf, cx)) {
+    if (!ArrayBufferObject::wasmMovingGrowToPages(newPages, oldBuf, &newBuf,
+                                                  cx)) {
       return -1;
     }
   } else {
-    if (Maybe<uint64_t> maxSize = oldBuf->wasmMaxSize()) {
-      if (newSize.value() > maxSize.value()) {
+    if (Maybe<Pages> maxPages = oldBuf->wasmMaxPages()) {
+      if (newPages > *maxPages) {
         return -1;
       }
     }
 
-    if (!ArrayBufferObject::wasmGrowToSizeInPlace(BufferSize(newSize.value()),
-                                                  oldBuf, &newBuf, cx)) {
+    if (!ArrayBufferObject::wasmGrowToPagesInPlace(newPages, oldBuf, &newBuf,
+                                                   cx)) {
       return -1;
     }
   }
@@ -2794,7 +2736,9 @@ uint32_t WasmMemoryObject::grow(HandleWasmMemoryObject memory, uint32_t delta,
     }
   }
 
-  return oldNumPages;
+  // It is safe to cast to uint32_t, as oldNumPages was within our
+  // implementation limits of MaxMemory32Pages(), which is within uint32_t.
+  return uint32_t(oldNumPages.value());
 }
 
 bool js::wasm::IsSharedWasmMemoryObject(JSObject* obj) {
@@ -2947,18 +2891,11 @@ bool WasmTableObject::construct(JSContext* cx, unsigned argc, Value* vp) {
   if (StringEqualsLiteral(elementLinearStr, "anyfunc") ||
       StringEqualsLiteral(elementLinearStr, "funcref")) {
     tableType = RefType::func();
-#ifdef ENABLE_WASM_REFTYPES
   } else if (StringEqualsLiteral(elementLinearStr, "externref")) {
-    if (!ReftypesAvailable(cx)) {
-      JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                               JSMSG_WASM_BAD_ELEMENT);
-      return false;
-    }
     tableType = RefType::extern_();
-#endif
 #ifdef ENABLE_WASM_GC
   } else if (StringEqualsLiteral(elementLinearStr, "eqref")) {
-    if (!GcTypesAvailable(cx)) {
+    if (!GcAvailable(cx)) {
       JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                                JSMSG_WASM_BAD_ELEMENT);
       return false;
@@ -2966,13 +2903,8 @@ bool WasmTableObject::construct(JSContext* cx, unsigned argc, Value* vp) {
     tableType = RefType::eq();
 #endif
   } else {
-#ifdef ENABLE_WASM_REFTYPES
     JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                              JSMSG_WASM_BAD_ELEMENT_GENERALIZED);
-#else
-    JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                             JSMSG_WASM_BAD_ELEMENT);
-#endif
     return false;
   }
 
@@ -3420,45 +3352,8 @@ bool WasmGlobalObject::construct(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-  RootedString typeStr(cx, ToString(cx, typeVal));
-  if (!typeStr) {
-    return false;
-  }
-
-  RootedLinearString typeLinearStr(cx, typeStr->ensureLinear(cx));
-  if (!typeLinearStr) {
-    return false;
-  }
-
   ValType globalType;
-  if (StringEqualsLiteral(typeLinearStr, "i32")) {
-    globalType = ValType::I32;
-  } else if (StringEqualsLiteral(typeLinearStr, "i64")) {
-    globalType = ValType::I64;
-  } else if (StringEqualsLiteral(typeLinearStr, "f32")) {
-    globalType = ValType::F32;
-  } else if (StringEqualsLiteral(typeLinearStr, "f64")) {
-    globalType = ValType::F64;
-#ifdef ENABLE_WASM_SIMD
-  } else if (SimdAvailable(cx) && StringEqualsLiteral(typeLinearStr, "v128")) {
-    globalType = ValType::V128;
-#endif
-#ifdef ENABLE_WASM_REFTYPES
-  } else if (ReftypesAvailable(cx) &&
-             StringEqualsLiteral(typeLinearStr, "funcref")) {
-    globalType = RefType::func();
-  } else if (ReftypesAvailable(cx) &&
-             StringEqualsLiteral(typeLinearStr, "externref")) {
-    globalType = RefType::extern_();
-#endif
-#ifdef ENABLE_WASM_GC
-  } else if (GcTypesAvailable(cx) &&
-             StringEqualsLiteral(typeLinearStr, "eqref")) {
-    globalType = RefType::eq();
-#endif
-  } else {
-    JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                             JSMSG_WASM_BAD_GLOBAL_TYPE);
+  if (!ToValType(cx, typeVal, &globalType)) {
     return false;
   }
 
@@ -3895,9 +3790,12 @@ static bool Reject(JSContext* cx, const CompileArgs& args,
     return false;
   }
 
+  // There's no error |cause| available here.
+  auto cause = JS::NothingHandleValue;
+
   RootedObject errorObj(
       cx, ErrorObject::create(cx, JSEXN_WASMCOMPILEERROR, stack, filename, 0,
-                              line, 0, nullptr, message));
+                              line, 0, nullptr, message, cause));
   if (!errorObj) {
     return false;
   }
@@ -4656,7 +4554,7 @@ static bool ResolveResponse_OnFulfilled(JSContext* cx, unsigned argc,
     return RejectWithPendingException(cx, promise);
   }
 
-  Unused << task.release();
+  (void)task.release();
 
   callArgs.rval().setUndefined();
   return true;
@@ -4865,23 +4763,37 @@ const JSClass js::WasmNamespaceObject::class_ = {
 // Sundry
 
 #ifdef JS_64BIT
-// TODO (large ArrayBuffer):
-//
-// This should be upped to (size_t(UINT32_MAX) + 1) / PageSize, see the
-// companion TODO in WasmMemoryObject::grow() for additional information.
-// Doing so is hard.
+#  ifdef ENABLE_WASM_CRANELIFT
+// TODO (large ArrayBuffer): Cranelift needs to be updated to use more than the
+// low 32 bits of the boundsCheckLimit, so for now we limit its heap size to
+// something that satisfies the 32-bit invariants.
 //
 // The "-2" here accounts for the !huge-memory case in CreateSpecificWasmBuffer,
 // which is guarding against an overflow.  Also see
 // WasmMemoryObject::boundsCheckLimit() for related assertions.
-size_t wasm::MaxMemory32Pages() {
+wasm::Pages wasm::MaxMemory32Pages() {
   size_t desired = MaxMemory32LimitField - 2;
   size_t actual = ArrayBufferObject::maxBufferByteLength() / PageSize;
-  return std::min(desired, actual);
+  return wasm::Pages(std::min(desired, actual));
 }
+
+size_t wasm::MaxMemory32BoundsCheckLimit() {
+  return UINT32_MAX - 2 * PageSize + 1;
+}
+#  else
+wasm::Pages wasm::MaxMemory32Pages() {
+  size_t desired = MaxMemory32LimitField;
+  size_t actual = ArrayBufferObject::maxBufferByteLength() / PageSize;
+  return wasm::Pages(std::min(desired, actual));
+}
+
+size_t wasm::MaxMemory32BoundsCheckLimit() { return size_t(UINT32_MAX) + 1; }
+#  endif
 #else
-size_t wasm::MaxMemory32Pages() {
+wasm::Pages wasm::MaxMemory32Pages() {
   MOZ_ASSERT(ArrayBufferObject::maxBufferByteLength() >= INT32_MAX / PageSize);
-  return INT32_MAX / PageSize;
+  return wasm::Pages(INT32_MAX / PageSize);
 }
+
+size_t wasm::MaxMemory32BoundsCheckLimit() { return size_t(INT32_MAX) + 1; }
 #endif

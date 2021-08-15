@@ -54,8 +54,10 @@ def _run_worker(config, paths, **lintargs):
         return result
 
     # Override warnings setup for code review
-    # Only activating when code_review_warnings is set on a linter.yml in use
-    if os.environ.get("CODE_REVIEW") == "1" and config.get("code_review_warnings"):
+    # Only disactivating when code_review_warnings is set to False on a linter.yml in use
+    if os.environ.get("CODE_REVIEW") == "1" and config.get(
+        "code_review_warnings", True
+    ):
         lintargs["show_warnings"] = True
 
     func = supported_types[config["type"]]
@@ -210,6 +212,9 @@ class LintRoller(object):
             try:
                 setupargs = copy.deepcopy(self.lintargs)
                 setupargs["name"] = linter["name"]
+                setupargs["log"] = logging.LoggerAdapter(
+                    self.log, {"lintname": linter["name"]}
+                )
                 if virtualenv_manager is not None:
                     setupargs["virtualenv_manager"] = virtualenv_manager
                 start_time = time.time()

@@ -238,6 +238,17 @@ void MacroAssembler::negateDouble(FloatRegister reg) { as_negd(reg, reg); }
 
 void MacroAssembler::negateFloat(FloatRegister reg) { as_negs(reg, reg); }
 
+void MacroAssembler::abs32(Register src, Register dest) {
+  // TODO: There's probably a better way to do this.
+  if (src != dest) {
+    move32(src, dest);
+  }
+  Label positive;
+  branchTest32(Assembler::NotSigned, dest, dest, &positive);
+  neg32(dest);
+  bind(&positive);
+}
+
 void MacroAssembler::absFloat32(FloatRegister src, FloatRegister dest) {
   as_abss(dest, src);
 }
@@ -492,6 +503,13 @@ void MacroAssembler::branchPtr(Condition cond, const BaseIndex& lhs,
                                ImmWord rhs, Label* label) {
   loadPtr(lhs, SecondScratchReg);
   branchPtr(cond, SecondScratchReg, rhs, label);
+}
+
+void MacroAssembler::branchPtr(Condition cond, const BaseIndex& lhs,
+                               Register rhs, Label* label) {
+  SecondScratchRegisterScope scratch(*this);
+  loadPtr(lhs, scratch);
+  branchPtr(cond, scratch, rhs, label);
 }
 
 void MacroAssembler::branchFloat(DoubleCondition cond, FloatRegister lhs,

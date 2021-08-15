@@ -11,7 +11,6 @@
 #include "mozilla/IntegerPrintfMacros.h"
 #include "mozilla/MemoryReporting.h"
 #include "mozilla/ThreadLocal.h"
-#include "mozilla/Unused.h"
 
 #include "gc/FreeOp.h"
 #include "gc/Marking.h"
@@ -62,7 +61,7 @@
 #include "util/Memory.h"
 #include "util/Windows.h"
 #include "vm/BytecodeIterator.h"
-#include "vm/HelperThreadState.h"
+#include "vm/HelperThreads.h"
 #include "vm/Realm.h"
 #include "vm/TraceLogging.h"
 #ifdef MOZ_VTUNE
@@ -1003,7 +1002,7 @@ bool OptimizeMIR(MIRGenerator* mir) {
   DumpMIRExpressions(graph, mir->outerInfo(),
                      "BuildSSA (== input to OptimizeMIR)");
 
-  if (!JitOptions.disablePgo && !mir->compilingWasm()) {
+  if (!JitOptions.disablePruning && !mir->compilingWasm()) {
     AutoTraceLog log(logger, TraceLogger_PruneUnusedBranches);
     JitSpewCont(JitSpew_Prune, "\n");
     if (!PruneUnusedBranches(mir, graph)) {
@@ -1409,6 +1408,20 @@ bool OptimizeMIR(MIRGenerator* mir) {
   AssertExtendedGraphCoherency(graph, /* underValueNumberer = */ false,
                                /* force = */ true);
 
+  // Remove unreachable blocks created by MBasicBlock::NewFakeLoopPredecessor
+  // to ensure every loop header has two predecessors. (This only happens due
+  // to OSR.)  After this point, it is no longer possible to build the
+  // dominator tree.
+  if (!mir->compilingWasm() && graph.osrBlock()) {
+    graph.removeFakeLoopPredecessors();
+    gs.spewPass("Remove fake loop predecessors");
+    AssertGraphCoherency(graph);
+
+    if (mir->shouldCancel("Remove fake loop predecessors")) {
+      return false;
+    }
+  }
+
   // Passes after this point must not move instructions; these analyses
   // depend on knowing the final order in which instructions will execute.
 
@@ -1645,7 +1658,7 @@ static AbortReason IonCompile(JSContext* cx, HandleScript script,
 
   CompileInfo* info = alloc->new_<CompileInfo>(
       CompileRuntime::get(cx->runtime()), script, script->function(), osrPc,
-      Analysis_None, script->needsArgsObj(), inlineScriptTree);
+      script->needsArgsObj(), inlineScriptTree);
   if (!info) {
     return AbortReason::Alloc;
   }
@@ -1698,7 +1711,7 @@ static AbortReason IonCompile(JSContext* cx, HandleScript script,
 
     // The allocator and associated data will be destroyed after being
     // processed in the finishedOffThreadCompilations list.
-    mozilla::Unused << alloc.release();
+    (void)alloc.release();
 
     return AbortReason::NoAbort;
   }
@@ -1924,7 +1937,7 @@ bool jit::OffThreadCompilationAvailable(JSContext* cx) {
   // Require cpuCount > 1 so that Ion compilation jobs and active-thread
   // execution are not competing for the same resources.
   return cx->runtime()->canUseOffthreadIonCompilation() &&
-         HelperThreadState().cpuCount > 1 && CanUseExtraThreads();
+         GetHelperThreadCPUCount() > 1 && CanUseExtraThreads();
 }
 
 MethodStatus jit::CanEnterIon(JSContext* cx, RunState& state) {

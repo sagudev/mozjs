@@ -384,7 +384,8 @@ class RegExpDepthCheck final : public v8::internal::RegExpVisitor {
   void* Visit##Kind(v8::internal::RegExp##Kind* node, void*) override { \
     uint8_t padding[FRAME_PADDING];                                     \
     dummy_ = padding; /* Prevent padding from being optimized away.*/   \
-    return (void*)CheckRecursionLimitDontReport(cx_);                   \
+    AutoCheckRecursionLimit recursion(cx_);                             \
+    return (void*)recursion.checkDontReport(cx_);                       \
   }
 
   LEAF_DEPTH(Assertion)
@@ -400,7 +401,8 @@ class RegExpDepthCheck final : public v8::internal::RegExpVisitor {
   void* Visit##Kind(v8::internal::RegExp##Kind* node, void*) override { \
     uint8_t padding[FRAME_PADDING];                                     \
     dummy_ = padding; /* Prevent padding from being optimized away.*/   \
-    if (!CheckRecursionLimitDontReport(cx_)) {                          \
+    AutoCheckRecursionLimit recursion(cx_);                             \
+    if (!recursion.checkDontReport(cx_)) {                              \
       return nullptr;                                                   \
     }                                                                   \
     return node->body()->Accept(this, nullptr);                         \
@@ -416,7 +418,8 @@ class RegExpDepthCheck final : public v8::internal::RegExpVisitor {
                          void*) override {
     uint8_t padding[FRAME_PADDING];
     dummy_ = padding; /* Prevent padding from being optimized away.*/
-    if (!CheckRecursionLimitDontReport(cx_)) {
+    AutoCheckRecursionLimit recursion(cx_);
+    if (!recursion.checkDontReport(cx_)) {
       return nullptr;
     }
     for (auto* child : *node->nodes()) {
@@ -430,7 +433,8 @@ class RegExpDepthCheck final : public v8::internal::RegExpVisitor {
                          void*) override {
     uint8_t padding[FRAME_PADDING];
     dummy_ = padding; /* Prevent padding from being optimized away.*/
-    if (!CheckRecursionLimitDontReport(cx_)) {
+    AutoCheckRecursionLimit recursion(cx_);
+    if (!recursion.checkDontReport(cx_)) {
       return nullptr;
     }
     for (auto* child : *node->alternatives()) {
@@ -761,6 +765,19 @@ uint32_t CaseInsensitiveCompareUnicode(const char16_t* substring1,
   return SMRegExpMacroAssembler::CaseInsensitiveCompareUnicode(
       substring1, substring2, byteLength);
 }
+
+#ifdef DEBUG
+bool IsolateShouldSimulateInterrupt(Isolate* isolate) {
+  return isolate->shouldSimulateInterrupt_ != 0;
+}
+
+void IsolateSetShouldSimulateInterrupt(Isolate* isolate) {
+  isolate->shouldSimulateInterrupt_ = 1;
+}
+void IsolateClearShouldSimulateInterrupt(Isolate* isolate) {
+  isolate->shouldSimulateInterrupt_ = 0;
+}
+#endif
 
 }  // namespace irregexp
 }  // namespace js

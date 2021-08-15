@@ -7,6 +7,7 @@
 #ifndef vm_JSObject_h
 #define vm_JSObject_h
 
+#include "mozilla/Maybe.h"
 #include "mozilla/MemoryReporting.h"
 
 #include "gc/Barrier.h"
@@ -18,6 +19,7 @@
 #include "js/Wrapper.h"
 #include "vm/BytecodeUtil.h"
 #include "vm/Printer.h"
+#include "vm/PropertyResult.h"
 #include "vm/Shape.h"
 #include "vm/StringType.h"
 #include "vm/Xdr.h"
@@ -44,6 +46,22 @@ class NativeObject;
 class NewObjectCache;
 
 enum class IntegrityLevel { Sealed, Frozen };
+
+/*
+ * The NewObjectKind allows an allocation site to specify the lifetime
+ * requirements that must be fixed at allocation time.
+ */
+enum NewObjectKind {
+  /* This is the default. Most objects are generic. */
+  GenericObject,
+
+  /*
+   * Objects which will not benefit from being allocated in the nursery
+   * (e.g. because they are known to have a long lifetime) may be allocated
+   * with this kind to place them immediately into the tenured generation.
+   */
+  TenuredObject
+};
 
 // Forward declarations, required for later friend declarations.
 bool PreventExtensions(JSContext* cx, JS::HandleObject obj,
@@ -86,7 +104,6 @@ class JSObject
 #endif
 
  private:
-  friend class js::DictionaryShapeLink;
   friend class js::GCMarker;
   friend class js::GlobalObject;
   friend class js::NewObjectCache;
@@ -147,10 +164,7 @@ class JSObject
     return reinterpret_cast<JSObject*>(p - JSObject::offsetOfShape());
   }
 
-  enum GenerateShape { GENERATE_NONE, GENERATE_SHAPE };
-
-  static bool setFlag(JSContext* cx, JS::HandleObject obj, js::ObjectFlag flag,
-                      GenerateShape generateShape = GENERATE_NONE);
+  static bool setFlag(JSContext* cx, JS::HandleObject obj, js::ObjectFlag flag);
 
   bool hasFlag(js::ObjectFlag flag) const {
     return shape()->hasObjectFlag(flag);
@@ -178,7 +192,7 @@ class JSObject
     return hasFlag(js::ObjectFlag::IsUsedAsPrototype);
   }
   static bool setIsUsedAsPrototype(JSContext* cx, JS::HandleObject obj) {
-    return setFlag(cx, obj, js::ObjectFlag::IsUsedAsPrototype, GENERATE_SHAPE);
+    return setFlag(cx, obj, js::ObjectFlag::IsUsedAsPrototype);
   }
 
   inline bool isBoundFunction() const;
@@ -223,7 +237,7 @@ class JSObject
     MOZ_ASSERT(obj->hasStaticPrototype(),
                "uncacheability as a concept is only applicable to static "
                "(not dynamically-computed) prototypes");
-    return setFlag(cx, obj, js::ObjectFlag::UncacheableProto, GENERATE_SHAPE);
+    return setFlag(cx, obj, js::ObjectFlag::UncacheableProto);
   }
 
   /*
@@ -413,10 +427,6 @@ class JSObject
   static void swap(JSContext* cx, JS::HandleObject a, JS::HandleObject b,
                    js::AutoEnterOOMUnsafeRegion& oomUnsafe);
 
- private:
-  void fixDictionaryShapeAfterSwap();
-
- public:
   /*
    * In addition to the generic object interface provided by JSObject,
    * specific types of objects may provide additional operations. To access,
@@ -799,7 +809,7 @@ bool ToPropertyDescriptor(JSContext* cx, HandleValue descval,
                           MutableHandle<JS::PropertyDescriptor> desc);
 
 /*
- * Throw a TypeError if desc.getterObject() or setterObject() is not
+ * Throw a TypeError if desc.getter() or setter() is not
  * callable. This performs exactly the checks omitted by ToPropertyDescriptor
  * when checkAccessors is false.
  */
@@ -819,8 +829,7 @@ extern bool ReadPropertyDescriptors(
 /* Read the name using a dynamic lookup on the scopeChain. */
 extern bool LookupName(JSContext* cx, HandlePropertyName name,
                        HandleObject scopeChain, MutableHandleObject objp,
-                       MutableHandleObject pobjp,
-                       MutableHandle<PropertyResult> propp);
+                       MutableHandleObject pobjp, PropertyResult* propp);
 
 extern bool LookupNameNoGC(JSContext* cx, PropertyName* name,
                            JSObject* scopeChain, JSObject** objp,
@@ -873,9 +882,6 @@ bool GetOwnNativeGetterPure(JSContext* cx, JSObject* obj, jsid id,
 
 bool HasOwnDataPropertyPure(JSContext* cx, JSObject* obj, jsid id,
                             bool* result);
-
-bool GetOwnPropertyDescriptor(JSContext* cx, HandleObject obj, HandleId id,
-                              MutableHandle<JS::PropertyDescriptor> desc);
 
 /*
  * Like JS::FromPropertyDescriptor, but ignore desc.object() and always set vp

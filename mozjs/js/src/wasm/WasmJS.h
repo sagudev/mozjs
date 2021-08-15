@@ -35,10 +35,11 @@
 #include "js/SweepingAPI.h"    // JS::WeakCache
 #include "js/TypeDecls.h"  // HandleValue, HandleObject, MutableHandleObject, MutableHandleFunction
 #include "js/Vector.h"  // JS::Vector
-#include "vm/BufferSize.h"
-#include "vm/JSFunction.h"    // JSFunction
-#include "vm/NativeObject.h"  // NativeObject
-#include "wasm/WasmTypes.h"   // MutableHandleWasmInstanceObject, wasm::*
+#include "js/WasmFeatures.h"
+#include "vm/JSFunction.h"     // JSFunction
+#include "vm/NativeObject.h"   // NativeObject
+#include "wasm/WasmTlsData.h"  // UniqueTlsData
+#include "wasm/WasmTypes.h"    // MutableHandleWasmInstanceObject, wasm::*
 
 class JSFreeOp;
 class JSObject;
@@ -100,6 +101,11 @@ bool CraneliftAvailable(JSContext* cx);
 
 bool AnyCompilerAvailable(JSContext* cx);
 
+// Asm.JS is translated to wasm and then compiled using the wasm optimizing
+// compiler; test whether this compiler is available.
+
+bool WasmCompilerForAsmJSAvailable(JSContext* cx);
+
 // Predicates for white-box compiler disablement testing.
 //
 // These predicates determine whether the optimizing compilers were disabled by
@@ -131,23 +137,12 @@ bool StreamingCompilationAvailable(JSContext* cx);
 // optimizing compiler tier.
 bool CodeCachingAvailable(JSContext* cx);
 
-// General reference types (externref, funcref) and operations on them.
-bool ReftypesAvailable(JSContext* cx);
-
-// Typed functions reference support.
-bool FunctionReferencesAvailable(JSContext* cx);
-
-// Experimental (ref T) types and structure types.
-bool GcTypesAvailable(JSContext* cx);
-
-// Multi-value block and function returns.
-bool MultiValuesAvailable(JSContext* cx);
-
 // Shared memory and atomics.
 bool ThreadsAvailable(JSContext* cx);
 
-// SIMD data and operations.
-bool SimdAvailable(JSContext* cx);
+#define WASM_FEATURE(NAME, ...) bool NAME##Available(JSContext* cx);
+JS_FOR_WASM_FEATURES(WASM_FEATURE, WASM_FEATURE)
+#undef WASM_FEATURE
 
 // Very experimental SIMD operations.
 bool SimdWormholeAvailable(JSContext* cx);
@@ -161,20 +156,11 @@ void ReportSimdAnalysis(const char* data);
 // options can support try/catch, throw, rethrow, and branch_on_exn (evolving).
 bool ExceptionsAvailable(JSContext* cx);
 
-size_t MaxMemory32Pages();
-
-#ifdef JS_64BIT
-static inline size_t MaxMemory32BoundsCheckLimit() {
-  return UINT32_MAX - 2 * PageSize + 1;
-}
-#else
-static inline size_t MaxMemory32BoundsCheckLimit() {
-  return size_t(INT32_MAX) + 1;
-}
-#endif
+Pages MaxMemory32Pages();
+size_t MaxMemory32BoundsCheckLimit();
 
 static inline size_t MaxMemory32Bytes() {
-  return MaxMemory32Pages() * PageSize;
+  return MaxMemory32Pages().byteLength();
 }
 
 // Compiles the given binary wasm module given the ArrayBufferObject
@@ -417,15 +403,23 @@ class WasmMemoryObject : public NativeObject {
   // `volatileMemoryLength()`, instead.
   ArrayBufferObjectMaybeShared& buffer() const;
 
-  // The current length of the memory.  In the case of shared memory, the
-  // length can change at any time.  Also note that this will acquire a lock
+  // The current length of the memory in bytes. In the case of shared memory,
+  // the length can change at any time.  Also note that this will acquire a lock
   // for shared memory, so do not call this from a signal handler.
-  js::BufferSize volatileMemoryLength() const;
+  size_t volatileMemoryLength() const;
+
+  // The current length of the memory in pages. See the comment for
+  // `volatileMemoryLength` for details on why this is 'volatile'.
+  wasm::Pages volatilePages() const;
+
+  // The maximum length of the memory in pages. This is not 'volatile' in
+  // contrast to the current length, as it cannot change for shared memories.
+  mozilla::Maybe<wasm::Pages> maxPages() const;
 
   bool isShared() const;
   bool isHuge() const;
   bool movingGrowable() const;
-  js::BufferSize boundsCheckLimit() const;
+  size_t boundsCheckLimit() const;
 
   // If isShared() is true then obtain the underlying buffer object.
   SharedArrayRawBuffer* sharedArrayRawBuffer() const;

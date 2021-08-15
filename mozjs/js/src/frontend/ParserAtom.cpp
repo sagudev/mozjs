@@ -46,6 +46,13 @@ JSAtom* GetWellKnownAtom(JSContext* cx, WellKnownAtomId atomId) {
   JS_FOR_EACH_PROTOTYPE(ASSERT_OFFSET_);
 #undef ASSERT_OFFSET_
 
+#define ASSERT_OFFSET_(NAME)                     \
+  static_assert(offsetof(JSAtomState, NAME) ==   \
+                int32_t(WellKnownAtomId::NAME) * \
+                    sizeof(js::ImmutablePropertyNamePtr));
+  JS_FOR_EACH_WELL_KNOWN_SYMBOL(ASSERT_OFFSET_);
+#undef ASSERT_OFFSET_
+
   static_assert(int32_t(WellKnownAtomId::abort) == 0,
                 "Unexpected order of WellKnownAtom");
 
@@ -392,7 +399,7 @@ TaggedParserAtomIndex ParserAtomsTable::internUtf8(
   uint32_t length = 0;
   InflatedChar16Sequence<mozilla::Utf8Unit> seqCopy = seq;
   while (seqCopy.hasMore()) {
-    mozilla::Unused << seqCopy.next();
+    (void)seqCopy.next();
     length += 1;
   }
 
@@ -929,6 +936,13 @@ bool WellKnownParserAtoms::init(JSContext* cx) {
     return false;                                                  \
   }
   JS_FOR_EACH_PROTOTYPE(COMMON_NAME_INIT_)
+#undef COMMON_NAME_INIT_
+#define COMMON_NAME_INIT_(NAME)                                    \
+  if (!initSingle(cx, GetWellKnownAtomInfo(WellKnownAtomId::NAME), \
+                  TaggedParserAtomIndex::WellKnown::NAME())) {     \
+    return false;                                                  \
+  }
+  JS_FOR_EACH_WELL_KNOWN_SYMBOL(COMMON_NAME_INIT_)
 #undef COMMON_NAME_INIT_
 
   return true;

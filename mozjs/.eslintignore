@@ -40,9 +40,6 @@ browser/components/sessionstore/test/unit/data/sessionstore_invalid.js
 browser/components/enterprisepolicies/schemas/schema.jsm
 # generated & special files in cld2
 browser/components/translation/cld2/
-# Screenshots is imported as a system add-on and has
-# their own lint rules currently.
-browser/extensions/screenshots/
 # generated or library files in pocket
 browser/components/pocket/content/panels/js/tmpl.js
 
@@ -133,7 +130,6 @@ js/public/
 js/xpconnect/
 js/src/devtools/
 js/src/jit-test/
-js/src/jsapi-tests/binast/
 js/src/tests/
 js/src/Y.js
 
@@ -159,6 +155,7 @@ python/
 # These are (mainly) imported code that we don't want to lint to make imports easier.
 remote/cdp/Protocol.jsm
 remote/cdp/test/browser/chrome-remote-interface.js
+remote/marionette/atom.js
 
 # services/ exclusions
 
@@ -174,7 +171,6 @@ servo/
 
 # Test files that we don't want to lint (preprocessed, minified etc)
 testing/condprofile/condprof/tests/profile
-testing/marionette/atom.js
 testing/mozbase/mozprofile/tests/files/prefs_with_comments.js
 testing/talos/talos/scripts/jszip.min.js
 testing/talos/talos/startup_test/sessionrestore/profile/sessionstore.js
@@ -211,9 +207,6 @@ toolkit/components/reader/Readerable.jsm
 toolkit/mozapps/update/tests/data/xpcshellConstantsPP.js
 toolkit/modules/AppConstants.jsm
 
-# Tests old non-star function generators
-toolkit/modules/tests/xpcshell/test_task.js
-
 # Uses special template formatting.
 tools/tryselect/selectors/chooser/templates/chooser.html
 
@@ -222,3 +215,6 @@ tools/update-packaging/**/*refs.js
 
 # Ignore backgroundtasks preferences files.
 toolkit/components/backgroundtasks/defaults
+
+# Ignore pre-generated webpack and typescript transpiled files for translations
+browser/extensions/translations/extension/

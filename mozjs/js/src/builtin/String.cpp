@@ -12,7 +12,6 @@
 #include "mozilla/PodOperations.h"
 #include "mozilla/Range.h"
 #include "mozilla/TextUtils.h"
-#include "mozilla/Unused.h"
 
 #include <algorithm>
 #include <limits>
@@ -32,7 +31,7 @@
 #include "jit/InlinableNatives.h"
 #include "js/Conversions.h"
 #include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
-#include "js/friend/StackLimits.h"    // js::CheckRecursionLimit
+#include "js/friend/StackLimits.h"    // js::AutoCheckRecursionLimit
 #if !JS_HAS_INTL_API
 #  include "js/LocaleSensitive.h"
 #endif
@@ -469,7 +468,8 @@ const JSClass StringObject::class_ = {
  */
 static MOZ_ALWAYS_INLINE JSString* ToStringForStringFunction(
     JSContext* cx, const char* funName, HandleValue thisv) {
-  if (!CheckRecursionLimit(cx)) {
+  AutoCheckRecursionLimit recursion(cx);
+  if (!recursion.check(cx)) {
     return nullptr;
   }
 
@@ -3597,9 +3597,7 @@ static const JSFunctionSpec string_methods[] = {
     JS_SELF_HOSTED_FN("concat", "String_concat", 1, 0),
     JS_SELF_HOSTED_FN("slice", "String_slice", 2, 0),
 
-#ifdef NIGHTLY_BUILD
     JS_SELF_HOSTED_FN("at", "String_at", 1, 0),
-#endif
 
     /* HTML string methods. */
     JS_SELF_HOSTED_FN("bold", "String_bold", 0, 0),
@@ -3878,8 +3876,12 @@ Shape* StringObject::assignInitialShape(JSContext* cx,
                                         Handle<StringObject*> obj) {
   MOZ_ASSERT(obj->empty());
 
-  return NativeObject::addDataProperty(cx, obj, cx->names().length, LENGTH_SLOT,
-                                       JSPROP_PERMANENT | JSPROP_READONLY);
+  if (!NativeObject::addPropertyInReservedSlot(cx, obj, cx->names().length,
+                                               LENGTH_SLOT, {})) {
+    return nullptr;
+  }
+
+  return obj->shape();
 }
 
 JSObject* StringObject::createPrototype(JSContext* cx, JSProtoKey key) {

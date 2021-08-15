@@ -112,28 +112,13 @@ extern bool enableWasm;
 extern bool enableSharedMemory;
 extern bool enableWasmBaseline;
 extern bool enableWasmOptimizing;
-#ifdef JS_CODEGEN_ARM64
-// Cranelift->Ion transition
-extern bool forceWasmIon;
-#endif
-extern bool enableWasmReftypes;
-#ifdef ENABLE_WASM_FUNCTION_REFERENCES
-extern bool enableWasmFunctionReferences;
-#endif
-#ifdef ENABLE_WASM_GC
-extern bool enableWasmGc;
-#endif
-#ifdef ENABLE_WASM_MULTI_VALUE
-extern bool enableWasmMultiValue;
-#endif
-#ifdef ENABLE_WASM_SIMD
-extern bool enableWasmSimd;
-#endif
+
+#define WASM_FEATURE(NAME, ...) extern bool enableWasm##NAME;
+JS_FOR_WASM_FEATURES(WASM_FEATURE, WASM_FEATURE);
+#undef WASM_FEATURE
+
 #ifdef ENABLE_WASM_SIMD_WORMHOLE
 extern bool enableWasmSimdWormhole;
-#endif
-#ifdef ENABLE_WASM_EXCEPTIONS
-extern bool enableWasmExceptions;
 #endif
 extern bool enableWasmVerbose;
 extern bool enableTestWasmAwaitTier2;
@@ -152,7 +137,9 @@ extern bool useOffThreadParseGlobal;
 extern bool enableIteratorHelpers;
 extern bool enablePrivateClassFields;
 extern bool enablePrivateClassMethods;
+extern bool enableErgonomicBrandChecks;
 extern bool enableTopLevelAwait;
+extern bool enableClassStaticBlocks;
 #ifdef JS_GC_ZEAL
 extern uint32_t gZealBits;
 extern uint32_t gZealFrequency;
@@ -162,7 +149,6 @@ extern RCFile* gErrFile;
 extern RCFile* gOutFile;
 extern bool reportWarnings;
 extern bool compileOnly;
-extern bool fuzzingSafe;
 extern bool disableOOMFunctions;
 extern bool defaultToSameCompartment;
 
@@ -185,7 +171,7 @@ extern UniqueChars processWideModuleLoadPath;
 bool CreateAlias(JSContext* cx, const char* dstName,
                  JS::HandleObject namespaceObj, const char* srcName);
 
-enum class ScriptKind { Script, DecodeScript, Module };
+enum class ScriptKind { Script, ScriptStencil, DecodeScript, Module };
 
 class NonshrinkingGCObjectVector
     : public GCVector<JSObject*, 0, SystemAllocPolicy> {

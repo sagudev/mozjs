@@ -45,7 +45,7 @@ struct DefaultJitOptions {
   bool disableGvn;
   bool disableInlining;
   bool disableLicm;
-  bool disablePgo;
+  bool disablePruning;
   bool disableInstructionReordering;
   bool disableRangeAnalysis;
   bool disableRecoverIns;
@@ -53,7 +53,6 @@ struct DefaultJitOptions {
   bool disableCacheIR;
   bool disableSink;
   bool disableBailoutLoopCheck;
-  bool scalarReplaceArguments;
   bool baselineInterpreter;
   bool baselineJit;
   bool ion;
@@ -144,6 +143,17 @@ inline bool IsBaselineInterpreterEnabled() {
 }
 
 }  // namespace jit
+
+extern mozilla::Atomic<bool> fuzzingSafe;
+
+static inline bool IsFuzzing() {
+#ifdef FUZZING
+  return true;
+#else
+  return fuzzingSafe;
+#endif
+}
+
 }  // namespace js
 
 #endif /* jit_JitOptions_h */

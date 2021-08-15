@@ -245,8 +245,12 @@ void MacroAssembler::mul64(Imm64 imm, const Register64& dest,
 }
 
 void MacroAssembler::mul64(Imm64 imm, const Register64& dest) {
-  movq(ImmWord(uintptr_t(imm.value)), ScratchReg);
-  imulq(ScratchReg, dest.reg);
+  if (INT32_MIN <= int64_t(imm.value) && int64_t(imm.value) <= INT32_MAX) {
+    imulq(Imm32((int32_t)imm.value), dest.reg, dest.reg);
+  } else {
+    movq(ImmWord(uintptr_t(imm.value)), ScratchReg);
+    imulq(ScratchReg, dest.reg);
+  }
 }
 
 void MacroAssembler::mul64(const Register64& src, const Register64& dest,
@@ -719,6 +723,12 @@ void MacroAssembler::branchTestMagic(Condition cond, const Address& valaddr,
   uint64_t magic = MagicValue(why).asRawBits();
   cmpPtr(valaddr, ImmWord(magic));
   j(cond, label);
+}
+
+void MacroAssembler::branchTestValue(Condition cond, const BaseIndex& lhs,
+                                     const ValueOperand& rhs, Label* label) {
+  MOZ_ASSERT(cond == Assembler::Equal || cond == Assembler::NotEqual);
+  branchPtr(cond, lhs, rhs.valueReg(), label);
 }
 
 void MacroAssembler::branchToComputedAddress(const BaseIndex& address) {

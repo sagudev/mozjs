@@ -449,23 +449,14 @@ class MacroAssemblerX86Shared : public Assembler {
                       FloatRegister output);
   void compareInt8x16(Assembler::Condition cond, const SimdConstant& rhs,
                       FloatRegister lhsDest);
-  void unsignedCompareInt8x16(FloatRegister lhs, Operand rhs,
-                              Assembler::Condition cond, FloatRegister output,
-                              FloatRegister tmp1, FloatRegister tmp2);
   void compareInt16x8(FloatRegister lhs, Operand rhs, Assembler::Condition cond,
                       FloatRegister output);
   void compareInt16x8(Assembler::Condition cond, const SimdConstant& rhs,
                       FloatRegister lhsDest);
-  void unsignedCompareInt16x8(FloatRegister lhs, Operand rhs,
-                              Assembler::Condition cond, FloatRegister output,
-                              FloatRegister tmp1, FloatRegister tmp2);
   void compareInt32x4(FloatRegister lhs, Operand rhs, Assembler::Condition cond,
                       FloatRegister output);
   void compareInt32x4(Assembler::Condition cond, const SimdConstant& rhs,
                       FloatRegister lhsDest);
-  void unsignedCompareInt32x4(FloatRegister lhs, Operand rhs,
-                              Assembler::Condition cond, FloatRegister output,
-                              FloatRegister tmp1, FloatRegister tmp2);
   void compareForEqualityInt64x2(FloatRegister lhs, Operand rhs,
                                  Assembler::Condition cond,
                                  FloatRegister output);
@@ -513,7 +504,7 @@ class MacroAssemblerX86Shared : public Assembler {
                                        Register temp, FloatRegister xtmp,
                                        FloatRegister dest);
   void packedRightShiftByScalarInt8x16(Imm32 count, FloatRegister src,
-                                       FloatRegister temp, FloatRegister dest);
+                                       FloatRegister dest);
   void packedUnsignedRightShiftByScalarInt8x16(FloatRegister in, Register count,
                                                Register temp,
                                                FloatRegister xtmp,
@@ -808,14 +799,7 @@ class MacroAssemblerX86Shared : public Assembler {
     vshufps(mask, src, dest, dest);
   }
   void selectX4(FloatRegister mask, FloatRegister onTrue, FloatRegister onFalse,
-                FloatRegister temp, FloatRegister output) {
-    if (AssemblerX86Shared::HasAVX()) {
-      vblendvps(mask, onTrue, onFalse, output);
-    } else {
-      selectSimd128(mask, onTrue, onFalse, temp, output);
-    }
-  }
-
+                FloatRegister temp, FloatRegister output);
   // End unused SIMD.
 
   void moveFloatAsDouble(Register src, FloatRegister dest) {

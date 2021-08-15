@@ -16,8 +16,10 @@
  * limitations under the License.
  */
 
-#ifndef wasm_binary_h
-#define wasm_binary_h
+#ifndef wasm_constants_h
+#define wasm_constants_h
+
+#include <stdint.h>
 
 namespace js {
 namespace wasm {
@@ -219,6 +221,7 @@ enum class Op {
   Try = 0x06,
   Catch = 0x07,
   Throw = 0x08,
+  Rethrow = 0x09,
 #endif
   End = 0x0b,
   Br = 0x0c,
@@ -229,6 +232,12 @@ enum class Op {
   // Call operators
   Call = 0x10,
   CallIndirect = 0x11,
+
+// Additional exception operators
+#ifdef ENABLE_WASM_EXCEPTIONS
+  Delegate = 0x18,
+  CatchAll = 0x19,
+#endif
 
   // Parametric operators
   Drop = 0x1a,
@@ -1003,10 +1012,8 @@ static const unsigned MaxTables = 100000;
 static const unsigned MaxImports = 100000;
 static const unsigned MaxExports = 100000;
 static const unsigned MaxGlobals = 1000000;
-#ifdef ENABLE_WASM_EXCEPTIONS
 static const unsigned MaxEvents =
     1000000;  // TODO: get this into the shared limits spec
-#endif
 static const unsigned MaxDataSegments = 100000;
 static const unsigned MaxDataSegmentLengthPages = 16384;
 static const unsigned MaxElemSegments = 10000000;
@@ -1015,8 +1022,6 @@ static const unsigned MaxTableLimitField = UINT32_MAX;
 static const unsigned MaxTableLength = 10000000;
 static const unsigned MaxLocals = 50000;
 static const unsigned MaxParams = 1000;
-// The actual maximum results may be `1` if multi-value is not enabled. Check
-// `env->funcMaxResults()` to get the correct value for a module.
 static const unsigned MaxResults = 1000;
 static const unsigned MaxStructFields = 1000;
 static const unsigned MaxMemory32LimitField = 65536;
@@ -1035,6 +1040,10 @@ static const unsigned MaxResultsForJitInlineCall = MaxResultsForJitEntry;
 // The maximum number of results of a function call or block that may be
 // returned in registers.
 static const unsigned MaxRegisterResults = 1;
+// An asm.js heap can in principle be up to INT32_MAX bytes but requirements
+// on the format restrict it further to the largest pseudo-ARM-immediate.
+// See IsValidAsmJSHeapLength().
+static const uint64_t MaxAsmJSHeapLength = 0x7f000000;
 
 // A magic value of the FramePointer to indicate after a return to the entry
 // stub that an exception has been caught and that we should throw.
@@ -1069,4 +1078,4 @@ enum class MemoryUsage { None = false, Unshared = 1, Shared = 2 };
 }  // namespace wasm
 }  // namespace js
 
-#endif  // wasm_binary_h
+#endif  // wasm_constants_h

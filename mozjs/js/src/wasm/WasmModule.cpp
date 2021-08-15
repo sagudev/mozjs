@@ -19,7 +19,6 @@
 #include "wasm/WasmModule.h"
 
 #include <chrono>
-#include <thread>
 
 #include "jit/JitOptions.h"
 #include "js/BuildId.h"                 // JS::BuildIdCharVector
@@ -73,7 +72,8 @@ class Module::Tier2GeneratorTaskImpl : public Tier2GeneratorTask {
 
     // During shutdown the main thread will wait for any ongoing (cancelled)
     // tier-2 generation to shut down normally.  To do so, it waits on the
-    // CONSUMER condition for the count of finished generators to rise.
+    // HelperThreadState's condition variable for the count of finished
+    // generators to rise.
     HelperThreadState().incWasmTier2GeneratorsFinished(locked);
 
     // The task is finished, release it.
@@ -81,7 +81,7 @@ class Module::Tier2GeneratorTaskImpl : public Tier2GeneratorTask {
   }
 
   ThreadType threadType() override {
-    return ThreadType::THREAD_TYPE_WASM_TIER2;
+    return ThreadType::THREAD_TYPE_WASM_GENERATOR_TIER2;
   }
 };
 
@@ -199,7 +199,7 @@ bool Module::finishTier2(const LinkData& linkData2,
 
 void Module::testingBlockOnTier2Complete() const {
   while (testingTier2Active_) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ThisThread::SleepMilliseconds(1);
   }
 }
 
@@ -513,20 +513,6 @@ bool Module::extractCode(JSContext* cx, Tier tier,
   return true;
 }
 
-static uint32_t EvaluateOffsetInitExpr(const ValVector& globalImportValues,
-                                       InitExpr initExpr) {
-  switch (initExpr.kind()) {
-    case InitExpr::Kind::Constant:
-      return initExpr.val().i32();
-    case InitExpr::Kind::GetGlobal:
-      return globalImportValues[initExpr.globalIndex()].i32();
-    case InitExpr::Kind::RefFunc:
-      break;
-  }
-
-  MOZ_CRASH("bad initializer expression");
-}
-
 #ifdef DEBUG
 static bool AllSegmentsArePassive(const DataSegmentVector& vec) {
   for (const DataSegment* seg : vec) {
@@ -550,8 +536,12 @@ bool Module::initSegments(JSContext* cx, HandleWasmInstanceObject instanceObj,
 
   for (const ElemSegment* seg : elemSegments_) {
     if (seg->active()) {
-      uint32_t offset =
-          EvaluateOffsetInitExpr(globalImportValues, seg->offset());
+      RootedVal offsetVal(cx);
+      if (!seg->offset().evaluate(cx, globalImportValues, instanceObj,
+                                  &offsetVal)) {
+        return false;  // OOM
+      }
+      uint32_t offset = offsetVal.get().i32();
       uint32_t count = seg->length();
 
       uint32_t tableLength = tables[seg->tableIndex]->length();
@@ -568,7 +558,7 @@ bool Module::initSegments(JSContext* cx, HandleWasmInstanceObject instanceObj,
   }
 
   if (memoryObj) {
-    size_t memoryLength = memoryObj->volatileMemoryLength().get();
+    size_t memoryLength = memoryObj->volatileMemoryLength();
     uint8_t* memoryBase =
         memoryObj->buffer().dataPointerEither().unwrap(/* memcpy */);
 
@@ -577,8 +567,12 @@ bool Module::initSegments(JSContext* cx, HandleWasmInstanceObject instanceObj,
         continue;
       }
 
-      uint32_t offset =
-          EvaluateOffsetInitExpr(globalImportValues, seg->offset());
+      RootedVal offsetVal(cx);
+      if (!seg->offset().evaluate(cx, globalImportValues, instanceObj,
+                                  &offsetVal)) {
+        return false;  // OOM
+      }
+      uint32_t offset = offsetVal.get().i32();
       uint32_t count = seg->bytes.length();
 
       if (offset > memoryLength || memoryLength - offset < count) {
@@ -709,38 +703,35 @@ bool Module::instantiateMemory(JSContext* cx,
     return true;
   }
 
-  uint64_t declaredMin = metadata().minMemoryLength;
-  Maybe<uint64_t> declaredMax = metadata().maxMemoryLength;
-  bool declaredShared = metadata().memoryUsage == MemoryUsage::Shared;
+  MemoryDesc desc = *metadata().memory;
+  MOZ_ASSERT(desc.kind == MemoryKind::Memory32);
 
   if (memory) {
     MOZ_ASSERT_IF(metadata().isAsmJS(), memory->buffer().isPreparedForAsmJS());
     MOZ_ASSERT_IF(!metadata().isAsmJS(), memory->buffer().isWasm());
 
-    if (!CheckLimits(cx, declaredMin, declaredMax,
-                     /* defaultMax */ uint64_t(MaxMemory32Bytes()),
+    if (!CheckLimits(cx, desc.initialPages(), desc.maximumPages(),
+                     /* defaultMax */ MaxMemory32Pages(),
                      /* actualLength */
-                     uint64_t(memory->volatileMemoryLength().get()),
-                     memory->buffer().wasmMaxSize(), metadata().isAsmJS(),
-                     "Memory")) {
+                     memory->volatilePages(), memory->maxPages(),
+                     metadata().isAsmJS(), "Memory")) {
       return false;
     }
 
-    if (!CheckSharing(cx, declaredShared, memory->isShared())) {
+    if (!CheckSharing(cx, desc.isShared(), memory->isShared())) {
       return false;
     }
   } else {
     MOZ_ASSERT(!metadata().isAsmJS());
 
-    if (declaredMin > MaxMemory32Bytes()) {
+    if (desc.initialPages() > MaxMemory32Pages()) {
       JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                                JSMSG_WASM_MEM_IMP_LIMIT);
       return false;
     }
 
     RootedArrayBufferObjectMaybeShared buffer(cx);
-    if (!CreateWasmBuffer32(cx, declaredMin, declaredMax, declaredShared,
-                            &buffer)) {
+    if (!CreateWasmBuffer32(cx, desc, &buffer)) {
       return false;
     }
 
@@ -1105,36 +1096,11 @@ static bool GetGlobalExport(JSContext* cx, HandleWasmInstanceObject instanceObj,
   MOZ_ASSERT(!global.isMutable());
   MOZ_ASSERT(!global.isImport());
   RootedVal globalVal(cx);
-  switch (global.kind()) {
-    case GlobalKind::Variable: {
-      const InitExpr& init = global.initExpr();
-      switch (init.kind()) {
-        case InitExpr::Kind::Constant:
-          globalVal.set(Val(init.val()));
-          break;
-        case InitExpr::Kind::GetGlobal:
-          globalVal.set(Val(globalImportValues[init.globalIndex()]));
-          break;
-        case InitExpr::Kind::RefFunc:
-          RootedFunction func(cx);
-          if (!GetFunctionExport(cx, instanceObj, funcImports,
-                                 init.refFuncIndex(), &func)) {
-            return false;
-          }
-          globalVal.set(
-              Val(ValType(RefType::func()), FuncRef::fromJSFunction(func)));
-      }
-      break;
-    }
-    case GlobalKind::Constant: {
-      globalVal.set(Val(global.constantValue()));
-      break;
-    }
-    case GlobalKind::Import: {
-      MOZ_CRASH();
-    }
+  MOZ_RELEASE_ASSERT(!global.isImport());
+  const InitExpr& init = global.initExpr();
+  if (!init.evaluate(cx, globalImportValues, instanceObj, &globalVal)) {
+    return false;
   }
-
   globalObj->val() = globalVal;
   return true;
 }

@@ -123,6 +123,7 @@
  * -   `regexpIndex` (`JOF_REGEXP`): `RegExpObject*`
  * -   `scopeIndex` (`JOF_SCOPE`): `Scope*`
  * -   `lexicalScopeIndex` (`JOF_SCOPE`): `LexicalScope*`
+ * -   `classBodyScopeIndex` (`JOF_SCOPE`): `ClassBodyScope*`
  * -   `withScopeIndex` (`JOF_SCOPE`): `WithScope*`
  * -   `bigIntIndex` (`JOF_BIGINT`): `BigInt*`
  *
@@ -2862,6 +2863,16 @@
      */ \
     MACRO(GetAliasedVar, get_aliased_var, NULL, 5, 0, 1, JOF_ENVCOORD|JOF_NAME) \
     /*
+     * Push the value of an aliased binding, which may have to bypass a DebugEnvironmentProxy
+     * on the environment chain.
+     *
+     *   Category: Variables and scopes
+     *   Type: Getting binding values
+     *   Operands: uint8_t hops, uint24_t slot
+     *   Stack: => aliasedVar
+     */ \
+    MACRO(GetAliasedDebugVar, get_aliased_debug_var, NULL, 5, 0, 1, JOF_DEBUGCOORD|JOF_NAME) \
+    /*
      * Get the value of a module import by name and pushes it onto the stack.
      *
      *   Category: Variables and scopes
@@ -3063,7 +3074,8 @@
      * #### Fine print for environment chain instructions
      *
      * The following rules for `JSOp::{Push,Pop}LexicalEnv` also apply to
-     * `JSOp::PushVarEnv` and `JSOp::{Enter,Leave}With`.
+     * `JSOp::PushClassBodyEnv`, `JSOp::PushVarEnv`, and
+     * `JSOp::{Enter,Leave}With`.
      *
      * Each `JSOp::PopLexicalEnv` instruction matches a particular
      * `JSOp::PushLexicalEnv` instruction in the same script and must have the
@@ -3095,7 +3107,7 @@
      */ \
     MACRO(PushLexicalEnv, push_lexical_env, NULL, 5, 0, 0, JOF_SCOPE) \
     /*
-     * Pop a lexical environment from the environment chain.
+     * Pop a lexical or class-body environment from the environment chain.
      *
      * See `JSOp::PushLexicalEnv` for the fine print.
      *
@@ -3114,9 +3126,9 @@
      * debugger still needs to be notified when control exits a scope; that's
      * what this instruction does.
      *
-     * The last instruction in a lexical scope, as indicated by scope notes,
-     * must be either this instruction (if the scope is optimized) or
-     * `JSOp::PopLexicalEnv` (if not).
+     * The last instruction in a lexical or class-body scope, as indicated by
+     * scope notes, must be either this instruction (if the scope is optimized)
+     * or `JSOp::PopLexicalEnv` (if not).
      *
      *   Category: Variables and scopes
      *   Type: Entering and leaving environments
@@ -3149,6 +3161,21 @@
      *   Stack: =>
      */ \
     MACRO(FreshenLexicalEnv, freshen_lexical_env, NULL, 1, 0, 0, JOF_BYTE) \
+    /*
+     * Push a ClassBody environment onto the environment chain.
+     *
+     * Like `JSOp::PushLexicalEnv`, but pushes a `ClassBodyEnvironmentObject`
+     * rather than a `BlockLexicalEnvironmentObject`.  `JSOp::PopLexicalEnv` is
+     * used to pop class-body environments as well as lexical environments.
+     *
+     * See `JSOp::PushLexicalEnv` for the fine print.
+     *
+     *   Category: Variables and scopes
+     *   Type: Entering and leaving environments
+     *   Operands: uint32_t lexicalScopeIndex
+     *   Stack: =>
+     */ \
+    MACRO(PushClassBodyEnv, push_class_body_env, NULL, 5, 0, 0, JOF_SCOPE) \
     /*
      * Push a var environment onto the environment chain.
      *
@@ -3295,30 +3322,6 @@
      *
      * The current script must be a function script. This instruction must
      * execute at most once per function activation.
-     *
-     * #### Optimized arguments
-     *
-     * If `script->needsArgsObj()` is false, no ArgumentsObject is created.
-     * Instead, `MagicValue(JS_OPTIMIZED_ARGUMENTS)` is pushed.
-     *
-     * This optimization imposes no restrictions on bytecode. Rather,
-     * `js::jit::AnalyzeArgumentsUsage` examines the bytecode and enables the
-     * optimization only if all uses of `arguments` are optimizable.  Each
-     * execution engine must know what the analysis considers optimizable and
-     * cope with the magic value when it is used in those ways.
-     *
-     * Example 1: `arguments[0]` is supported; therefore the interpreter's
-     * implementation of `JSOp::GetElem` checks for optimized arguments (see
-     * `MaybeGetElemOptimizedArguments`).
-     *
-     * Example 2: `f.apply(this, arguments)` is supported; therefore our
-     * implementation of `Function.prototype.apply` checks for optimized
-     * arguments (`see js::fun_apply`), and all `JSOp::FunApply` implementations
-     * must check for cases where `f.apply` turns out to be any other function
-     * (see `GuardFunApplyArgumentsOptimization`).
-     *
-     * It's not documented anywhere exactly which opcodes support
-     * `JS_OPTIMIZED_ARGUMENTS`; see the source of `AnalyzeArgumentsUsage`.
      *
      *   Category: Variables and scopes
      *   Type: Function environment setup
@@ -3488,30 +3491,6 @@
      */ \
     MACRO(DebugCheckSelfHosted, debug_check_self_hosted, NULL, 1, 1, 1, JOF_BYTE) \
     /*
-     * Push a boolean indicating if instrumentation is active.
-     *
-     *   Category: Other
-     *   Operands:
-     *   Stack: => val
-     */ \
-    MACRO(InstrumentationActive, instrumentation_active, NULL, 1, 0, 1, JOF_BYTE) \
-    /*
-     * Push the instrumentation callback for the current realm.
-     *
-     *   Category: Other
-     *   Operands:
-     *   Stack: => val
-     */ \
-    MACRO(InstrumentationCallback, instrumentation_callback, NULL, 1, 0, 1, JOF_BYTE) \
-    /*
-     * Push the current script's instrumentation ID.
-     *
-     *   Category: Other
-     *   Operands:
-     *   Stack: => val
-     */ \
-    MACRO(InstrumentationScriptId, instrumentation_script_id, NULL, 1, 0, 1, JOF_BYTE) \
-    /*
      * Break in the debugger, if one is attached. Otherwise this is a no-op.
      *
      * The [`Debugger` API][1] offers a way to hook into this instruction.
@@ -3534,6 +3513,7 @@
  * a power of two.  Use this macro to do so.
  */
 #define FOR_EACH_TRAILING_UNUSED_OPCODE(MACRO) \
+  MACRO(227)                                   \
   MACRO(228)                                   \
   MACRO(229)                                   \
   MACRO(230)                                   \

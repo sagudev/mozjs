@@ -19,13 +19,15 @@
 #include "wasm/WasmCompile.h"
 
 #include "mozilla/Maybe.h"
-#include "mozilla/Unused.h"
 
 #include <algorithm>
 
-#include "jit/ProcessExecutableMemory.h"
+#ifndef __wasi__
+#  include "jit/ProcessExecutableMemory.h"
+#endif
+
 #include "util/Text.h"
-#include "vm/HelperThreadState.h"
+#include "vm/HelperThreads.h"
 #include "vm/Realm.h"
 #include "wasm/WasmBaselineCompile.h"
 #include "wasm/WasmCraneliftCompile.h"
@@ -80,20 +82,25 @@ uint32_t wasm::ObservedCPUFeatures() {
 
 FeatureArgs FeatureArgs::build(JSContext* cx, const FeatureOptions& options) {
   FeatureArgs features;
+
+#define WASM_FEATURE(NAME, LOWER_NAME, ...) \
+  features.LOWER_NAME = wasm::NAME##Available(cx);
+  JS_FOR_WASM_FEATURES(WASM_FEATURE, WASM_FEATURE);
+#undef WASM_FEATURE
+
+  features.sharedMemory =
+      wasm::ThreadsAvailable(cx) ? Shareable::True : Shareable::False;
+  features.hugeMemory = wasm::IsHugeMemoryEnabled();
+
   // See comments in WasmConstants.h regarding the meaning of the wormhole
   // options.
   bool wormholeOverride =
       wasm::SimdWormholeAvailable(cx) && options.simdWormhole;
-  features.sharedMemory =
-      wasm::ThreadsAvailable(cx) ? Shareable::True : Shareable::False;
-  features.refTypes = wasm::ReftypesAvailable(cx);
-  features.functionReferences = wasm::FunctionReferencesAvailable(cx);
-  features.gcTypes = wasm::GcTypesAvailable(cx);
-  features.multiValue = wasm::MultiValuesAvailable(cx);
-  features.v128 = wasm::SimdAvailable(cx) || wormholeOverride;
-  features.hugeMemory = wasm::IsHugeMemoryEnabled();
   features.simdWormhole = wormholeOverride;
-  features.exceptions = wasm::ExceptionsAvailable(cx);
+  if (wormholeOverride) {
+    features.v128 = true;
+  }
+
   return features;
 }
 
@@ -473,7 +480,7 @@ static const double spaceCutoffPct = 0.9;
 
 // Figure out whether we should use tiered compilation or not.
 static bool TieringBeneficial(uint32_t codeSize) {
-  uint32_t cpuCount = HelperThreadState().cpuCount;
+  uint32_t cpuCount = GetHelperThreadCPUCount();
   MOZ_ASSERT(cpuCount > 0);
 
   // It's mostly sensible not to background compile when there's only one
@@ -487,17 +494,15 @@ static bool TieringBeneficial(uint32_t codeSize) {
     return false;
   }
 
-  MOZ_ASSERT(HelperThreadState().threadCount >= cpuCount);
-
   // Compute the max number of threads available to do actual background
   // compilation work.
 
-  uint32_t workers = HelperThreadState().maxWasmCompilationThreads();
+  uint32_t workers = GetMaxWasmCompilationThreads();
 
   // The number of cores we will use is bounded both by the CPU count and the
-  // worker count.
+  // worker count, since the worker count already takes this into account.
 
-  uint32_t cores = std::min(cpuCount, workers);
+  uint32_t cores = workers;
 
   SystemClass cls = ClassifySystem();
 

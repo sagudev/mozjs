@@ -57,7 +57,7 @@
 #include "js/Conversions.h"
 #include "js/Date.h"
 #include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
-#include "js/friend/StackLimits.h"    // js::CheckSystemRecursionLimit
+#include "js/friend/StackLimits.h"    // js::AutoCheckRecursionLimit
 #include "js/Initialization.h"
 #include "js/JSON.h"
 #include "js/LocaleSensitive.h"
@@ -87,7 +87,6 @@
 #include "vm/ErrorObject.h"
 #include "vm/ErrorReporting.h"
 #include "vm/HelperThreads.h"
-#include "vm/Instrumentation.h"
 #include "vm/Interpreter.h"
 #include "vm/Iteration.h"
 #include "vm/JSAtom.h"
@@ -256,6 +255,10 @@ JS_PUBLIC_API bool JS::ObjectOpResult::failCantDefineWindowElement() {
 
 JS_PUBLIC_API bool JS::ObjectOpResult::failCantDeleteWindowElement() {
   return fail(JSMSG_CANT_DELETE_WINDOW_ELEMENT);
+}
+
+JS_PUBLIC_API bool JS::ObjectOpResult::failCantDefineWindowNamedProperty() {
+  return fail(JSMSG_CANT_DEFINE_WINDOW_NAMED_PROPERTY);
 }
 
 JS_PUBLIC_API bool JS::ObjectOpResult::failCantDeleteWindowNamedProperty() {
@@ -432,44 +435,9 @@ JS::ContextOptions& JS::ContextOptions::setWasmCranelift(bool flag) {
   return *this;
 }
 
-JS::ContextOptions& JS::ContextOptions::setWasmFunctionReferences(bool flag) {
-#ifdef ENABLE_WASM_FUNCTION_REFERENCES
-  wasmFunctionReferences_ = flag;
-#endif
-  return *this;
-}
-
-JS::ContextOptions& JS::ContextOptions::setWasmGc(bool flag) {
-#ifdef ENABLE_WASM_GC
-  wasmGc_ = flag;
-#endif
-  return *this;
-}
-
-JS::ContextOptions& JS::ContextOptions::setWasmMultiValue(bool flag) {
-#ifdef ENABLE_WASM_MULTI_VALUE
-  wasmMultiValue_ = flag;
-#endif
-  return *this;
-}
-
-JS::ContextOptions& JS::ContextOptions::setWasmSimd(bool flag) {
-#ifdef ENABLE_WASM_SIMD
-  wasmSimd_ = flag;
-#endif
-  return *this;
-}
-
 JS::ContextOptions& JS::ContextOptions::setWasmSimdWormhole(bool flag) {
 #ifdef ENABLE_WASM_SIMD_WORMHOLE
   wasmSimdWormhole_ = flag;
-#endif
-  return *this;
-}
-
-JS::ContextOptions& JS::ContextOptions::setWasmExceptions(bool flag) {
-#ifdef ENABLE_WASM_EXCEPTIONS
-  wasmExceptions_ = flag;
 #endif
   return *this;
 }
@@ -479,39 +447,6 @@ JS::ContextOptions& JS::ContextOptions::setFuzzing(bool flag) {
   fuzzing_ = flag;
 #endif
   return *this;
-}
-
-JS_PUBLIC_API bool JS::InitSelfHostedCode(JSContext* cx) {
-  MOZ_RELEASE_ASSERT(!cx->runtime()->hasInitializedSelfHosting(),
-                     "JS::InitSelfHostedCode() called more than once");
-
-  AutoNoteSingleThreadedRegion anstr;
-
-  JSRuntime* rt = cx->runtime();
-
-  if (!rt->initializeAtoms(cx)) {
-    return false;
-  }
-
-  if (!rt->initializeParserAtoms(cx)) {
-    return false;
-  }
-
-#ifndef JS_CODEGEN_NONE
-  if (!rt->createJitRuntime(cx)) {
-    return false;
-  }
-#endif
-
-  if (!rt->initSelfHosting(cx)) {
-    return false;
-  }
-
-  if (!rt->parentRuntime && !rt->initMainAtomsTables(cx)) {
-    return false;
-  }
-
-  return true;
 }
 
 JS_PUBLIC_API const char* JS_GetImplementationVersion(void) {
@@ -814,7 +749,7 @@ JS_PUBLIC_API JSObject* JS_TransplantObject(JSContext* cx, HandleObject origobj,
   return newIdentity;
 }
 
-JS_FRIEND_API void js::RemapRemoteWindowProxies(
+JS_PUBLIC_API void js::RemapRemoteWindowProxies(
     JSContext* cx, CompartmentTransplantCallback* callback,
     MutableHandleObject target) {
   AssertHeapIsIdle();
@@ -831,7 +766,9 @@ JS_FRIEND_API void js::RemapRemoteWindowProxies(
   AutoDisableProxyCheck adpc;
 
   AutoEnterOOMUnsafeRegion oomUnsafe;
-  if (!CheckSystemRecursionLimit(cx)) {
+
+  AutoCheckRecursionLimit recursion(cx);
+  if (!recursion.checkSystem(cx)) {
     oomUnsafe.crash("js::RemapRemoteWindowProxies");
   }
 
@@ -980,12 +917,12 @@ JS_PUBLIC_API bool JS_ResolveStandardClass(JSContext* cx, HandleObject obj,
   Handle<GlobalObject*> global = obj.as<GlobalObject>();
   *resolved = false;
 
-  if (!JSID_IS_ATOM(id)) {
+  if (!id.isAtom()) {
     return true;
   }
 
   /* Check whether we're resolving 'undefined', and define it if so. */
-  JSAtom* idAtom = JSID_TO_ATOM(id);
+  JSAtom* idAtom = id.toAtom();
   if (idAtom == cx->names().undefined) {
     *resolved = true;
     return DefineDataProperty(
@@ -1051,11 +988,11 @@ JS_PUBLIC_API bool JS_MayResolveStandardClass(const JSAtomState& names, jsid id,
     return true;
   }
 
-  if (!JSID_IS_ATOM(id)) {
+  if (!id.isAtom()) {
     return false;
   }
 
-  JSAtom* atom = JSID_TO_ATOM(id);
+  JSAtom* atom = id.toAtom();
 
   // This will return true even for deselected constructors.  (To do
   // better, we need a JSContext here; it's fine as it is.)
@@ -1207,11 +1144,11 @@ JS_PUBLIC_API JSProtoKey JS_IdToProtoKey(JSContext* cx, HandleId id) {
   CHECK_THREAD(cx);
   cx->check(id);
 
-  if (!JSID_IS_ATOM(id)) {
+  if (!id.isAtom()) {
     return JSProto_Null;
   }
 
-  JSAtom* atom = JSID_TO_ATOM(id);
+  JSAtom* atom = id.toAtom();
   const JSStdName* stdnm =
       LookupStdName(cx->names(), atom, standard_class_names);
   if (!stdnm) {
@@ -1381,7 +1318,7 @@ JS_PUBLIC_API void JS::RunIdleTimeGCTask(JSRuntime* rt) {
 JS_PUBLIC_API void JS_GC(JSContext* cx, JS::GCReason reason) {
   AssertHeapIsIdle();
   JS::PrepareForFullGC(cx);
-  cx->runtime()->gc.gc(GC_NORMAL, reason);
+  cx->runtime()->gc.gc(JS::GCOptions::Normal, reason);
 }
 
 JS_PUBLIC_API void JS_MaybeGC(JSContext* cx) {
@@ -1429,6 +1366,14 @@ JS_PUBLIC_API void JS::ClearKeptObjects(JSContext* cx) {
 
 JS_PUBLIC_API bool JS::ZoneIsCollecting(JS::Zone* zone) {
   return zone->wasGCStarted();
+}
+
+JS_PUBLIC_API bool JS::AtomsZoneIsCollecting(JSRuntime* runtime) {
+  return runtime->activeGCInAtomsZone();
+}
+
+JS_PUBLIC_API bool JS::IsAtomsZone(JS::Zone* zone) {
+  return zone->isAtomsZone();
 }
 
 JS_PUBLIC_API bool JS_AddWeakPointerZonesCallback(JSContext* cx,
@@ -1540,21 +1485,28 @@ JS_GetExternalStringCallbacks(JSString* str) {
 
 static void SetNativeStackLimit(JSContext* cx, JS::StackKind kind,
                                 size_t stackSize) {
-#if JS_STACK_GROWTH_DIRECTION > 0
+#ifdef __wasi__
+  // WASI makes this easy: we build with the "stack-first" wasm-ld option, so
+  // the stack grows downward toward zero. Let's set a limit just a bit above
+  // this so that we catch an overflow before a Wasm trap occurs.
+  cx->nativeStackLimit[kind] = 1024;
+#else  // __wasi__
+#  if JS_STACK_GROWTH_DIRECTION > 0
   if (stackSize == 0) {
     cx->nativeStackLimit[kind] = UINTPTR_MAX;
   } else {
-    MOZ_ASSERT(cx->nativeStackBase <= size_t(-1) - stackSize);
-    cx->nativeStackLimit[kind] = cx->nativeStackBase + stackSize - 1;
+    MOZ_ASSERT(cx->nativeStackBase() <= size_t(-1) - stackSize);
+    cx->nativeStackLimit[kind] = cx->nativeStackBase() + stackSize - 1;
   }
-#else
+#  else   // stack grows up
   if (stackSize == 0) {
     cx->nativeStackLimit[kind] = 0;
   } else {
-    MOZ_ASSERT(cx->nativeStackBase >= stackSize);
-    cx->nativeStackLimit[kind] = cx->nativeStackBase - (stackSize - 1);
+    MOZ_ASSERT(cx->nativeStackBase() >= stackSize);
+    cx->nativeStackLimit[kind] = cx->nativeStackBase() - (stackSize - 1);
   }
-#endif
+#  endif  // stack grows down
+#endif    // !__wasi__
 }
 
 JS_PUBLIC_API void JS_SetNativeStackQuota(JSContext* cx,
@@ -1961,15 +1913,6 @@ JS_PUBLIC_API void JS::AssertObjectBelongsToCurrentThread(JSObject* obj) {
   MOZ_RELEASE_ASSERT(CurrentThreadCanAccessRuntime(rt));
 }
 
-// TODO:
-// Bug 1630189: Windows PGO build will have a linking error for
-// HelperThreadTaskCallback, use MOZ_NEVER_INLINE to prevent this. See
-// https://bugzilla.mozilla.org/show_bug.cgi?id=1630189#c4
-JS_PUBLIC_API MOZ_NEVER_INLINE void SetHelperThreadTaskCallback(
-    bool (*callback)(js::UniquePtr<js::RunnableTask>)) {
-  HelperThreadTaskCallback = callback;
-}
-
 JS_PUBLIC_API void JS::SetFilenameValidationCallback(
     JS::FilenameValidationCallback cb) {
   js::gFilenameValidationCallback = cb;
@@ -2019,17 +1962,16 @@ JS_PUBLIC_API bool JS_SetImmutablePrototype(JSContext* cx, JS::HandleObject obj,
 
 JS_PUBLIC_API bool JS_GetOwnPropertyDescriptorById(
     JSContext* cx, HandleObject obj, HandleId id,
-    MutableHandle<PropertyDescriptor> desc) {
+    MutableHandle<Maybe<PropertyDescriptor>> desc) {
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
   cx->check(obj, id);
-
   return GetOwnPropertyDescriptor(cx, obj, id, desc);
 }
 
 JS_PUBLIC_API bool JS_GetOwnPropertyDescriptor(
     JSContext* cx, HandleObject obj, const char* name,
-    MutableHandle<PropertyDescriptor> desc) {
+    MutableHandle<Maybe<PropertyDescriptor>> desc) {
   JSAtom* atom = Atomize(cx, name, strlen(name));
   if (!atom) {
     return false;
@@ -2040,7 +1982,7 @@ JS_PUBLIC_API bool JS_GetOwnPropertyDescriptor(
 
 JS_PUBLIC_API bool JS_GetOwnUCPropertyDescriptor(
     JSContext* cx, HandleObject obj, const char16_t* name, size_t namelen,
-    MutableHandle<PropertyDescriptor> desc) {
+    MutableHandle<Maybe<PropertyDescriptor>> desc) {
   JSAtom* atom = AtomizeChars(cx, name, namelen);
   if (!atom) {
     return false;
@@ -2051,31 +1993,31 @@ JS_PUBLIC_API bool JS_GetOwnUCPropertyDescriptor(
 
 JS_PUBLIC_API bool JS_GetPropertyDescriptorById(
     JSContext* cx, HandleObject obj, HandleId id,
-    MutableHandle<PropertyDescriptor> desc) {
+    MutableHandle<Maybe<PropertyDescriptor>> desc, MutableHandleObject holder) {
   cx->check(obj, id);
-  return GetPropertyDescriptor(cx, obj, id, desc);
+  return GetPropertyDescriptor(cx, obj, id, desc, holder);
 }
 
 JS_PUBLIC_API bool JS_GetPropertyDescriptor(
     JSContext* cx, HandleObject obj, const char* name,
-    MutableHandle<PropertyDescriptor> desc) {
+    MutableHandle<Maybe<PropertyDescriptor>> desc, MutableHandleObject holder) {
   JSAtom* atom = Atomize(cx, name, strlen(name));
   if (!atom) {
     return false;
   }
   RootedId id(cx, AtomToId(atom));
-  return JS_GetPropertyDescriptorById(cx, obj, id, desc);
+  return JS_GetPropertyDescriptorById(cx, obj, id, desc, holder);
 }
 
 JS_PUBLIC_API bool JS_GetUCPropertyDescriptor(
     JSContext* cx, HandleObject obj, const char16_t* name, size_t namelen,
-    MutableHandle<PropertyDescriptor> desc) {
+    MutableHandle<Maybe<PropertyDescriptor>> desc, MutableHandleObject holder) {
   JSAtom* atom = AtomizeChars(cx, name, namelen);
   if (!atom) {
     return false;
   }
   RootedId id(cx, AtomToId(atom));
-  return JS_GetPropertyDescriptorById(cx, obj, id, desc);
+  return JS_GetPropertyDescriptorById(cx, obj, id, desc, holder);
 }
 
 static bool DefinePropertyByDescriptor(JSContext* cx, HandleObject obj,
@@ -2106,16 +2048,11 @@ JS_PUBLIC_API bool JS_DefinePropertyById(JSContext* cx, HandleObject obj,
 static bool DefineAccessorPropertyById(JSContext* cx, HandleObject obj,
                                        HandleId id, HandleObject getter,
                                        HandleObject setter, unsigned attrs) {
-  MOZ_ASSERT_IF(getter, attrs & JSPROP_GETTER);
-  MOZ_ASSERT_IF(setter, attrs & JSPROP_SETTER);
-
   // JSPROP_READONLY has no meaning when accessors are involved. Ideally we'd
   // throw if this happens, but we've accepted it for long enough that it's
   // not worth trying to make callers change their ways. Just flip it off on
   // its way through the API layer so that we can enforce this internally.
-  if (attrs & (JSPROP_GETTER | JSPROP_SETTER)) {
-    attrs &= ~JSPROP_READONLY;
-  }
+  attrs &= ~JSPROP_READONLY;
 
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
@@ -2129,8 +2066,6 @@ static bool DefineAccessorPropertyById(JSContext* cx, HandleObject obj,
                                        const JSNativeWrapper& set,
                                        unsigned attrs) {
   // Getter/setter are both possibly-null JSNatives. Wrap them in JSFunctions.
-
-  MOZ_ASSERT(!(attrs & (JSPROP_GETTER | JSPROP_SETTER)));
 
   RootedFunction getter(cx);
   if (get.op) {
@@ -2146,8 +2081,6 @@ static bool DefineAccessorPropertyById(JSContext* cx, HandleObject obj,
     if (get.info) {
       getter->setJitInfo(get.info);
     }
-
-    attrs |= JSPROP_GETTER;
   }
 
   RootedFunction setter(cx);
@@ -2164,8 +2097,6 @@ static bool DefineAccessorPropertyById(JSContext* cx, HandleObject obj,
     if (set.info) {
       setter->setJitInfo(set.info);
     }
-
-    attrs |= JSPROP_SETTER;
   }
 
   return DefineAccessorPropertyById(cx, obj, id, getter, setter, attrs);
@@ -2173,8 +2104,6 @@ static bool DefineAccessorPropertyById(JSContext* cx, HandleObject obj,
 
 static bool DefineDataPropertyById(JSContext* cx, HandleObject obj, HandleId id,
                                    HandleValue value, unsigned attrs) {
-  MOZ_ASSERT(!(attrs & (JSPROP_GETTER | JSPROP_SETTER)));
-
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
   cx->check(obj, id, value);
@@ -3177,7 +3106,6 @@ JS_PUBLIC_API bool JS::ObjectToCompletePropertyDescriptor(
     return false;
   }
   CompletePropertyDescriptor(desc);
-  desc.object().set(obj);
   return true;
 }
 
@@ -3490,10 +3418,12 @@ void JS::TransitiveCompileOptions::copyPODTransitiveOptions(
   introductionOffset = rhs.introductionOffset;
   hasIntroductionInfo = rhs.hasIntroductionInfo;
   hideScriptFromDebugger = rhs.hideScriptFromDebugger;
+  deferDebugMetadata = rhs.deferDebugMetadata;
   nonSyntacticScope = rhs.nonSyntacticScope;
   privateClassFields = rhs.privateClassFields;
   privateClassMethods = rhs.privateClassMethods;
   topLevelAwait = rhs.topLevelAwait;
+  classStaticBlocks = rhs.classStaticBlocks;
   useStencilXDR = rhs.useStencilXDR;
   useOffThreadParseGlobal = rhs.useOffThreadParseGlobal;
 };
@@ -3508,11 +3438,7 @@ void JS::ReadOnlyCompileOptions::copyPODNonTransitiveOptions(
 }
 
 JS::OwningCompileOptions::OwningCompileOptions(JSContext* cx)
-    : ReadOnlyCompileOptions(),
-      elementAttributeNameRoot(cx),
-      introductionScriptRoot(cx),
-      scriptOrModuleRoot(cx),
-      privateValueRoot(cx) {}
+    : ReadOnlyCompileOptions() {}
 
 void JS::OwningCompileOptions::release() {
   // OwningCompileOptions always owns these, so these casts are okay.
@@ -3541,11 +3467,6 @@ bool JS::OwningCompileOptions::copy(JSContext* cx,
   copyPODNonTransitiveOptions(rhs);
   copyPODTransitiveOptions(rhs);
 
-  elementAttributeNameRoot = rhs.elementAttributeName();
-  introductionScriptRoot = rhs.introductionScript();
-  scriptOrModuleRoot = rhs.scriptOrModule();
-  privateValueRoot = rhs.privateValue();
-
   if (rhs.filename()) {
     filename_ = DuplicateString(cx, rhs.filename()).release();
     if (!filename_) {
@@ -3571,16 +3492,13 @@ bool JS::OwningCompileOptions::copy(JSContext* cx,
   return true;
 }
 
-JS::CompileOptions::CompileOptions(JSContext* cx)
-    : ReadOnlyCompileOptions(),
-      elementAttributeNameRoot(cx),
-      introductionScriptRoot(cx),
-      scriptOrModuleRoot(cx),
-      privateValueRoot(cx) {
-  discardSource = cx->realm()->behaviors().discardSource();
-  if (!cx->options().asmJS()) {
-    asmJSOption = AsmJSOption::Disabled;
-  } else if (cx->realm()->debuggerObservesAsmJS()) {
+JS::CompileOptions::CompileOptions(JSContext* cx) : ReadOnlyCompileOptions() {
+  if (!js::IsAsmJSCompilationAvailable(cx)) {
+    // Distinguishing the cases is just for error reporting.
+    asmJSOption = !cx->options().asmJS()
+                      ? AsmJSOption::DisabledByAsmJSPref
+                      : AsmJSOption::DisabledByNoWasmCompiler;
+  } else if (cx->realm() && cx->realm()->debuggerObservesAsmJS()) {
     asmJSOption = AsmJSOption::DisabledByDebugger;
   } else {
     asmJSOption = AsmJSOption::Enabled;
@@ -3590,6 +3508,8 @@ JS::CompileOptions::CompileOptions(JSContext* cx)
   privateClassFields = cx->options().privateClassFields();
   privateClassMethods = cx->options().privateClassMethods();
   topLevelAwait = cx->options().topLevelAwait();
+
+  classStaticBlocks = cx->options().classStaticBlocks();
 
   useStencilXDR = !UseOffThreadParseGlobal();
   useOffThreadParseGlobal = UseOffThreadParseGlobal();
@@ -3602,14 +3522,16 @@ JS::CompileOptions::CompileOptions(JSContext* cx)
   // Certain modes of operation disallow syntax parsing in general.
   forceFullParse_ = coverage::IsLCovEnabled();
 
-  // If instrumentation is enabled in the realm, the compiler should insert the
-  // requested kinds of instrumentation into all scripts.
-  instrumentationKinds =
-      RealmInstrumentation::getInstrumentationKinds(cx->global());
+  // Note: If we parse outside of a specific realm, we do not inherit any realm
+  // behaviours. These can still be set manually on the options though.
+  if (cx->realm()) {
+    discardSource = cx->realm()->behaviors().discardSource();
+  }
 }
 
 CompileOptions& CompileOptions::setIntroductionInfoToCaller(
-    JSContext* cx, const char* introductionType) {
+    JSContext* cx, const char* introductionType,
+    MutableHandle<JSScript*> introductionScript) {
   RootedScript maybeScript(cx);
   const char* filename;
   unsigned lineno;
@@ -3618,11 +3540,10 @@ CompileOptions& CompileOptions::setIntroductionInfoToCaller(
   DescribeScriptedCallerForCompilation(cx, &maybeScript, &filename, &lineno,
                                        &pcOffset, &mutedErrors);
   if (filename) {
-    return setIntroductionInfo(filename, introductionType, lineno, maybeScript,
-                               pcOffset);
-  } else {
-    return setIntroductionType(introductionType);
+    introductionScript.set(maybeScript);
+    return setIntroductionInfo(filename, introductionType, lineno, pcOffset);
   }
+  return setIntroductionType(introductionType);
 }
 
 JS_PUBLIC_API JSObject* JS_GetGlobalFromScript(JSScript* script) {
@@ -4595,8 +4516,7 @@ JS_PUBLIC_API bool JS::PropertySpecNameEqualsId(JSPropertySpec::Name name,
   }
 
   MOZ_ASSERT(!PropertySpecNameIsDigits(name));
-  return JSID_IS_ATOM(id) &&
-         JS_LinearStringEqualsAscii(JSID_TO_ATOM(id), name.string());
+  return id.isAtom() && JS_LinearStringEqualsAscii(id.toAtom(), name.string());
 }
 
 JS_PUBLIC_API bool JS_Stringify(JSContext* cx, MutableHandleValue vp,
@@ -5283,6 +5203,13 @@ JS_PUBLIC_API void JS_SetGlobalJitCompilerOption(JSContext* cx,
         JitSpew(js::jit::JitSpew_IonScripts, "Disable offthread compilation");
       }
       break;
+    case JSJITCOMPILER_INLINING_BYTECODE_MAX_LENGTH:
+      if (value == uint32_t(-1)) {
+        jit::DefaultJitOptions defaultValues;
+        value = defaultValues.smallFunctionMaxBytecodeLength;
+      }
+      jit::JitOptions.smallFunctionMaxBytecodeLength = value;
+      break;
     case JSJITCOMPILER_JUMP_THRESHOLD:
       if (value == uint32_t(-1)) {
         jit::DefaultJitOptions defaultValues;
@@ -5364,6 +5291,9 @@ JS_PUBLIC_API bool JS_GetGlobalJitCompilerOption(JSContext* cx,
     case JSJITCOMPILER_ION_FREQUENT_BAILOUT_THRESHOLD:
       *valueOut = jit::JitOptions.frequentBailoutThreshold;
       break;
+    case JSJITCOMPILER_INLINING_BYTECODE_MAX_LENGTH:
+      *valueOut = jit::JitOptions.smallFunctionMaxBytecodeLength;
+      break;
     case JSJITCOMPILER_BASELINE_INTERPRETER_ENABLE:
       *valueOut = jit::JitOptions.baselineInterpreter;
       break;
@@ -5431,9 +5361,7 @@ JS_PUBLIC_API bool JS_CharsToId(JSContext* cx, JS::TwoByteChars chars,
     return false;
   }
 #ifdef DEBUG
-  uint32_t dummy;
-  MOZ_ASSERT(!atom->isIndex(&dummy),
-             "API misuse: |chars| must not encode an index");
+  MOZ_ASSERT(!atom->isIndex(), "API misuse: |chars| must not encode an index");
 #endif
   idp.set(AtomToId(atom));
   return true;

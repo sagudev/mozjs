@@ -81,8 +81,7 @@ static const SnapshotOffset INVALID_SNAPSHOT_OFFSET = uint32_t(-1);
  *
  * 2. If the bailout occurs because an assumption we made in WarpBuilder was
  *    invalidated, then FinishBailoutToBaseline will set a flag on the script
- *    to avoid that assumption in the future. Examples include
- *    NotOptimizedArgumentsGuard and UninitializedLexical.
+ *    to avoid that assumption in the future: for example, UninitializedLexical.
  *
  * 3. Similarly, if the bailing instruction is generated or modified by a MIR
  *    optimization, then FinishBailoutToBaseline will set a flag on the script
@@ -162,10 +161,6 @@ enum class BailoutKind : uint8_t {
   // We hit this code for the first time.
   FirstExecution,
 
-  // A bailout triggered by MGuardNotOptimizedArguments. We will call
-  // argumentsOptimizationFailed to invalidate the script.
-  NotOptimizedArgumentsGuard,
-
   // A lexical check failed. We will set lexical checks as unmovable.
   UninitializedLexical,
 
@@ -174,6 +169,9 @@ enum class BailoutKind : uint8_t {
 
   // We returned to a stack frame after invalidating its IonScript.
   OnStackInvalidation,
+
+  // We have executed code that should be unreachable, and need to assert.
+  Unreachable,
 
   Limit
 };
@@ -208,14 +206,14 @@ inline const char* BailoutKindString(BailoutKind kind) {
       return "Debugger";
     case BailoutKind::FirstExecution:
       return "FirstExecution";
-    case BailoutKind::NotOptimizedArgumentsGuard:
-      return "NotOptimizedArgumentsGuard";
     case BailoutKind::UninitializedLexical:
       return "UninitializedLexical";
     case BailoutKind::IonExceptionDebugMode:
       return "IonExceptionDebugMode";
     case BailoutKind::OnStackInvalidation:
       return "OnStackInvalidation";
+    case BailoutKind::Unreachable:
+      return "Unreachable";
 
     case BailoutKind::Limit:
       break;
@@ -483,7 +481,6 @@ enum class MIRType : uint8_t {
   Simd128,
   // Types above are primitive (including undefined and null).
   Object,
-  MagicOptimizedArguments,    // JS_OPTIMIZED_ARGUMENTS magic value.
   MagicOptimizedOut,          // JS_OPTIMIZED_OUT magic value.
   MagicHole,                  // JS_ELEMENTS_HOLE magic value.
   MagicIsConstructing,        // JS_IS_CONSTRUCTING magic value.
@@ -548,7 +545,6 @@ static inline JSValueType ValueTypeFromMIRType(MIRType type) {
       return JSVAL_TYPE_SYMBOL;
     case MIRType::BigInt:
       return JSVAL_TYPE_BIGINT;
-    case MIRType::MagicOptimizedArguments:
     case MIRType::MagicOptimizedOut:
     case MIRType::MagicHole:
     case MIRType::MagicIsConstructing:
@@ -610,8 +606,6 @@ static inline const char* StringFromMIRType(MIRType type) {
       return "BigInt";
     case MIRType::Object:
       return "Object";
-    case MIRType::MagicOptimizedArguments:
-      return "MagicOptimizedArguments";
     case MIRType::MagicOptimizedOut:
       return "MagicOptimizedOut";
     case MIRType::MagicHole:
@@ -675,7 +669,6 @@ static inline bool IsNullOrUndefined(MIRType type) {
 static inline bool IsMagicType(MIRType type) {
   return type == MIRType::MagicHole || type == MIRType::MagicOptimizedOut ||
          type == MIRType::MagicIsConstructing ||
-         type == MIRType::MagicOptimizedArguments ||
          type == MIRType::MagicUninitializedLexical;
 }
 

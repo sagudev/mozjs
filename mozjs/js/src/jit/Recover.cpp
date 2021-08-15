@@ -90,19 +90,14 @@ bool MResumePoint::writeRecoverData(CompactBufferWriter& writer) const {
         // include the this. When inlining that is not included.  So the
         // exprStackSlots will be one less.
         MOZ_ASSERT(stackDepth - exprStack <= 1);
-      } else if (bailOp != JSOp::FunApply &&
-                 !IsIonInlinableGetterOrSetterOp(bailOp)) {
-        // For fun.apply({}, arguments) the reconstructStackDepth will
-        // have stackdepth 4, but it could be that we inlined the
-        // funapply. In that case exprStackSlots, will have the real
-        // arguments in the slots and not be 4.
-
+      } else {
         // With accessors, we have different stack depths depending on
         // whether or not we inlined the accessor, as the inlined stack
         // contains a callee function that should never have been there
         // and we might just be capturing an uneventful property site,
         // in which case there won't have been any violence.
-        MOZ_ASSERT(exprStack == stackDepth);
+        MOZ_ASSERT_IF(!IsIonInlinableGetterOrSetterOp(bailOp),
+                      exprStack == stackDepth);
       }
     }
   }
@@ -1287,6 +1282,10 @@ bool MRandom::writeRecoverData(CompactBufferWriter& writer) const {
   return true;
 }
 
+bool MRandom::canRecoverOnBailout() const {
+  return !js::SupportDifferentialTesting();
+}
+
 RRandom::RRandom(CompactBufferReader& reader) {}
 
 bool RRandom::recover(JSContext* cx, SnapshotIterator& iter) const {
@@ -1530,6 +1529,74 @@ bool RNewObject::recover(JSContext* cx, SnapshotIterator& iter) const {
   return true;
 }
 
+bool MNewPlainObject::writeRecoverData(CompactBufferWriter& writer) const {
+  MOZ_ASSERT(canRecoverOnBailout());
+  writer.writeUnsigned(uint32_t(RInstruction::Recover_NewPlainObject));
+
+  MOZ_ASSERT(gc::AllocKind(uint8_t(allocKind_)) == allocKind_);
+  writer.writeByte(uint8_t(allocKind_));
+  MOZ_ASSERT(gc::InitialHeap(uint8_t(initialHeap_)) == initialHeap_);
+  writer.writeByte(uint8_t(initialHeap_));
+  return true;
+}
+
+RNewPlainObject::RNewPlainObject(CompactBufferReader& reader) {
+  allocKind_ = gc::AllocKind(reader.readByte());
+  MOZ_ASSERT(gc::IsValidAllocKind(allocKind_));
+  initialHeap_ = gc::InitialHeap(reader.readByte());
+  MOZ_ASSERT(initialHeap_ == gc::DefaultHeap ||
+             initialHeap_ == gc::TenuredHeap);
+}
+
+bool RNewPlainObject::recover(JSContext* cx, SnapshotIterator& iter) const {
+  RootedShape shape(cx, &iter.read().toGCCellPtr().as<Shape>());
+
+  // See CodeGenerator::visitNewPlainObject.
+  JSObject* resultObject =
+      NewPlainObjectOptimizedFallback(cx, shape, allocKind_, initialHeap_);
+  if (!resultObject) {
+    return false;
+  }
+
+  RootedValue result(cx);
+  result.setObject(*resultObject);
+  iter.storeInstructionResult(result);
+  return true;
+}
+
+bool MNewArrayObject::writeRecoverData(CompactBufferWriter& writer) const {
+  MOZ_ASSERT(canRecoverOnBailout());
+  writer.writeUnsigned(uint32_t(RInstruction::Recover_NewArrayObject));
+
+  writer.writeUnsigned(length_);
+  MOZ_ASSERT(gc::InitialHeap(uint8_t(initialHeap_)) == initialHeap_);
+  writer.writeByte(uint8_t(initialHeap_));
+  return true;
+}
+
+RNewArrayObject::RNewArrayObject(CompactBufferReader& reader) {
+  length_ = reader.readUnsigned();
+  initialHeap_ = gc::InitialHeap(reader.readByte());
+  MOZ_ASSERT(initialHeap_ == gc::DefaultHeap ||
+             initialHeap_ == gc::TenuredHeap);
+}
+
+bool RNewArrayObject::recover(JSContext* cx, SnapshotIterator& iter) const {
+  iter.read();  // Skip unused shape field.
+
+  NewObjectKind kind =
+      initialHeap_ == gc::TenuredHeap ? TenuredObject : GenericObject;
+  JSObject* array = NewArrayOperation(cx, length_, kind);
+  if (!array) {
+    return false;
+  }
+
+  RootedValue result(cx);
+  result.setObject(*array);
+  iter.storeInstructionResult(result);
+  return true;
+}
+
 bool MNewTypedArray::writeRecoverData(CompactBufferWriter& writer) const {
   MOZ_ASSERT(canRecoverOnBailout());
   writer.writeUnsigned(uint32_t(RInstruction::Recover_NewTypedArray));
@@ -1542,7 +1609,7 @@ bool RNewTypedArray::recover(JSContext* cx, SnapshotIterator& iter) const {
   RootedObject templateObject(cx, &iter.read().toObject());
   RootedValue result(cx);
 
-  size_t length = templateObject.as<TypedArrayObject>()->length().get();
+  size_t length = templateObject.as<TypedArrayObject>()->length();
   MOZ_ASSERT(length <= INT32_MAX,
              "Template objects are only created for int32 lengths");
 
@@ -1728,7 +1795,7 @@ RNewCallObject::RNewCallObject(CompactBufferReader& reader) {}
 bool RNewCallObject::recover(JSContext* cx, SnapshotIterator& iter) const {
   Rooted<CallObject*> templateObj(cx, &iter.read().toObject().as<CallObject>());
 
-  RootedShape shape(cx, templateObj->lastProperty());
+  RootedShape shape(cx, templateObj->shape());
 
   JSObject* resultObject = NewCallObject(cx, shape);
   if (!resultObject) {
@@ -1813,6 +1880,10 @@ bool MSetArrayLength::writeRecoverData(CompactBufferWriter& writer) const {
   return true;
 }
 
+bool MSetArrayLength::canRecoverOnBailout() const {
+  return isRecoveredOnBailout();
+}
+
 RSetArrayLength::RSetArrayLength(CompactBufferReader& reader) {}
 
 bool RSetArrayLength::recover(JSContext* cx, SnapshotIterator& iter) const {
@@ -1821,8 +1892,10 @@ bool RSetArrayLength::recover(JSContext* cx, SnapshotIterator& iter) const {
   RootedValue len(cx, iter.read());
 
   RootedId id(cx, NameToId(cx->names().length));
+  Rooted<PropertyDescriptor> desc(
+      cx, PropertyDescriptor::Data(len, JS::PropertyAttribute::Writable));
   ObjectOpResult error;
-  if (!ArraySetLength(cx, obj, id, JSPROP_PERMANENT, len, error)) {
+  if (!ArraySetLength(cx, obj, id, desc, error)) {
     return false;
   }
 

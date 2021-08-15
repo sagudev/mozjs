@@ -14,12 +14,13 @@
 #include <type_traits>  // std::has_unique_object_representations
 #include <utility>      // std::forward
 
-#include "ds/LifoAlloc.h"                 // LifoAlloc
-#include "frontend/CompilationStencil.h"  // CompilationStencil
-#include "frontend/ScriptIndex.h"         // ScriptIndex
-#include "vm/JSScript.h"                  // js::CheckCompileOptionsMatch
-#include "vm/Scope.h"                     // SizeOfParserScopeData
-#include "vm/StencilEnums.h"              // js::ImmutableScriptFlagsEnum
+#include "ds/LifoAlloc.h"                  // LifoAlloc
+#include "frontend/BytecodeCompilation.h"  // CanLazilyParse
+#include "frontend/CompilationStencil.h"  // CompilationStencil, ExtensibleCompilationStencil
+#include "frontend/ScriptIndex.h"  // ScriptIndex
+#include "vm/ErrorReporting.h"     // ErrorMetadata, ReportCompileErrorUTF8
+#include "vm/Scope.h"              // SizeOfParserScopeData
+#include "vm/StencilEnums.h"       // js::ImmutableScriptFlagsEnum
 
 using namespace js;
 using namespace js::frontend;
@@ -176,11 +177,11 @@ template <XDRMode mode>
   uint8_t flags = 0;
 
   if (mode == XDR_ENCODE) {
-    flags = stencil.flags_.serialize();
+    flags = stencil.flags_.toRaw();
   }
   MOZ_TRY(xdr->codeUint8(&flags));
   if (mode == XDR_DECODE) {
-    stencil.flags_.deserialize(flags);
+    stencil.flags_.setRaw(flags);
   }
 
   MOZ_TRY(xdr->codeUint32(&stencil.propertyCount_));
@@ -218,12 +219,13 @@ template <XDRMode mode>
   if (mode == XDR_ENCODE) {
     length = baseScopeData->length;
   } else {
-    MOZ_TRY(xdr->peekRawUint32(&length));
+    MOZ_TRY(xdr->peekUint32(&length));
   }
 
   AssertScopeSpecificDataIsEncodable<FunctionScope>();
   AssertScopeSpecificDataIsEncodable<VarScope>();
   AssertScopeSpecificDataIsEncodable<LexicalScope>();
+  AssertScopeSpecificDataIsEncodable<ClassBodyScope>();
   AssertScopeSpecificDataIsEncodable<EvalScope>();
   AssertScopeSpecificDataIsEncodable<GlobalScope>();
   AssertScopeSpecificDataIsEncodable<ModuleScope>();
@@ -243,7 +245,7 @@ template <XDRMode mode>
 XDRResult StencilXDR::codeSharedData(XDRState<mode>* xdr,
                                      RefPtr<SharedImmutableScriptData>& sisd) {
   if (mode == XDR_ENCODE) {
-    MOZ_TRY(XDRImmutableScriptData<mode>(xdr, sisd->isd_));
+    MOZ_TRY(XDRImmutableScriptData<mode>(xdr, *sisd));
   } else {
     JSContext* cx = xdr->cx();
     UniquePtr<SharedImmutableScriptData> data(
@@ -251,8 +253,12 @@ XDRResult StencilXDR::codeSharedData(XDRState<mode>* xdr,
     if (!data) {
       return xdr->fail(JS::TranscodeResult::Throw);
     }
-    MOZ_TRY(XDRImmutableScriptData<mode>(xdr, data->isd_));
+    MOZ_TRY(XDRImmutableScriptData<mode>(xdr, *data));
     sisd = data.release();
+
+    if (!SharedImmutableScriptData::shareScriptData(cx, sisd)) {
+      return xdr->fail(JS::TranscodeResult::Throw);
+    }
   }
 
   return Ok();
@@ -593,11 +599,21 @@ enum class SectionMarker : uint32_t {
   ScriptData = 0x840458FF,
   ScriptExtra = 0xA90E489D,
   ModuleMetadata = 0x94FDCE6D,
+  End = 0x16DDA135,
 };
 
 template <XDRMode mode>
 static XDRResult CodeMarker(XDRState<mode>* xdr, SectionMarker marker) {
   return xdr->codeMarker(uint32_t(marker));
+}
+
+static void ReportStencilXDRError(JSContext* cx, ErrorMetadata&& metadata,
+                                  int errorNumber, ...) {
+  va_list args;
+  va_start(args, errorNumber);
+  ReportCompileErrorUTF8(cx, std::move(metadata), /* notes = */ nullptr,
+                         errorNumber, &args);
+  va_end(args);
 }
 
 template <XDRMode mode>
@@ -611,6 +627,27 @@ template <XDRMode mode>
 
   MOZ_TRY(CodeMarker(xdr, SectionMarker::ParserAtomData));
   MOZ_TRY(codeParserAtomSpan(xdr, stencil.alloc, stencil.parserAtomData));
+
+  uint8_t canLazilyParse = 0;
+
+  if (mode == XDR_ENCODE) {
+    canLazilyParse = stencil.canLazilyParse;
+  }
+  MOZ_TRY(xdr->codeUint8(&canLazilyParse));
+  if (mode == XDR_DECODE) {
+    stencil.canLazilyParse = canLazilyParse;
+    MOZ_ASSERT(xdr->hasOptions());
+    if (stencil.canLazilyParse != CanLazilyParse(xdr->options())) {
+      ErrorMetadata metadata;
+      metadata.filename = "<unknown>";
+      metadata.lineNumber = 1;
+      metadata.columnNumber = 0;
+      metadata.isMuted = false;
+      ReportStencilXDRError(xdr->cx(), std::move(metadata),
+                            JSMSG_STENCIL_OPTIONS_MISMATCH);
+      return xdr->fail(JS::TranscodeResult::Throw);
+    }
+  }
 
   MOZ_TRY(xdr->codeUint32(&stencil.functionKey));
 
@@ -691,6 +728,8 @@ template <XDRMode mode>
     MOZ_TRY(CodeMarker(xdr, SectionMarker::ModuleMetadata));
     MOZ_TRY(codeModuleMetadata(xdr, *stencil.moduleMetadata));
   }
+
+  MOZ_TRY(CodeMarker(xdr, SectionMarker::End));
 
   return Ok();
 }

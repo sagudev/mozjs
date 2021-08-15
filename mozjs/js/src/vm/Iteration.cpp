@@ -14,7 +14,6 @@
 #include "mozilla/Maybe.h"
 #include "mozilla/MemoryReporting.h"
 #include "mozilla/PodOperations.h"
-#include "mozilla/Unused.h"
 
 #include <algorithm>
 #include <new>
@@ -97,16 +96,16 @@ void NativeIterator::trace(JSTracer* trc) {
   });
 }
 
-using IdSet = GCHashSet<jsid, DefaultHasher<jsid>>;
+using PropertyKeySet = GCHashSet<PropertyKey, DefaultHasher<PropertyKey>>;
 
 template <bool CheckForDuplicates>
 static inline bool Enumerate(JSContext* cx, HandleObject pobj, jsid id,
                              bool enumerable, unsigned flags,
-                             MutableHandle<IdSet> visited,
+                             MutableHandle<PropertyKeySet> visited,
                              MutableHandleIdVector props) {
   if (CheckForDuplicates) {
     // If we've already seen this, we definitely won't add it.
-    IdSet::AddPtr p = visited.lookupForAdd(id);
+    PropertyKeySet::AddPtr p = visited.lookupForAdd(id);
     if (MOZ_UNLIKELY(!!p)) {
       return true;
     }
@@ -130,7 +129,7 @@ static inline bool Enumerate(JSContext* cx, HandleObject pobj, jsid id,
   // the caller specifically asks for them. A caller can also filter out
   // non-symbols by asking for JSITER_SYMBOLSONLY. PrivateName symbols are
   // skipped unless JSITER_PRIVATE is passed.
-  if (JSID_IS_SYMBOL(id)) {
+  if (id.isSymbol()) {
     if (!(flags & JSITER_SYMBOLS)) {
       return true;
     }
@@ -148,7 +147,7 @@ static inline bool Enumerate(JSContext* cx, HandleObject pobj, jsid id,
 
 static bool EnumerateExtraProperties(JSContext* cx, HandleObject obj,
                                      unsigned flags,
-                                     MutableHandle<IdSet> visited,
+                                     MutableHandle<PropertyKeySet> visited,
                                      MutableHandleIdVector props) {
   MOZ_ASSERT(obj->getClass()->getNewEnumerate());
 
@@ -187,7 +186,7 @@ static bool SortComparatorIntegerIds(jsid a, jsid b, bool* lessOrEqualp) {
 template <bool CheckForDuplicates>
 static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
                                       unsigned flags,
-                                      MutableHandle<IdSet> visited,
+                                      MutableHandle<PropertyKeySet> visited,
                                       MutableHandleIdVector props) {
   bool enumerateSymbols;
   if (flags & JSITER_SYMBOLSONLY) {
@@ -215,7 +214,7 @@ static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
     // Collect any typed array or shared typed array elements from this
     // object.
     if (pobj->is<TypedArrayObject>()) {
-      size_t len = pobj->as<TypedArrayObject>().length().get();
+      size_t len = pobj->as<TypedArrayObject>().length();
 
       // Fail early if the typed array is enormous, because this will be very
       // slow and will likely report OOM. This also means we don't need to
@@ -244,13 +243,11 @@ static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
         firstElemIndex = props.length();
       }
 
-      for (Shape::Range<NoGC> r(pobj->lastProperty()); !r.empty();
-           r.popFront()) {
-        Shape& shape = r.front();
-        jsid id = shape.propid();
+      for (ShapePropertyIter<NoGC> iter(pobj->shape()); !iter.done(); iter++) {
+        jsid id = iter->key();
         uint32_t dummy;
         if (IdIsIndex(id, &dummy)) {
-          if (!Enumerate<CheckForDuplicates>(cx, pobj, id, shape.enumerable(),
+          if (!Enumerate<CheckForDuplicates>(cx, pobj, id, iter->enumerable(),
                                              flags, visited, props)) {
             return false;
           }
@@ -277,12 +274,10 @@ static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
 
     /* Collect all unique property names from this object's shape. */
     bool symbolsFound = false;
-    Shape::Range<NoGC> r(pobj->lastProperty());
-    for (; !r.empty(); r.popFront()) {
-      Shape& shape = r.front();
-      jsid id = shape.propid();
+    for (ShapePropertyIter<NoGC> iter(pobj->shape()); !iter.done(); iter++) {
+      jsid id = iter->key();
 
-      if (JSID_IS_SYMBOL(id)) {
+      if (id.isSymbol()) {
         symbolsFound = true;
         continue;
       }
@@ -292,7 +287,7 @@ static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
         continue;
       }
 
-      if (!Enumerate<CheckForDuplicates>(cx, pobj, id, shape.enumerable(),
+      if (!Enumerate<CheckForDuplicates>(cx, pobj, id, iter->enumerable(),
                                          flags, visited, props)) {
         return false;
       }
@@ -307,11 +302,10 @@ static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
     // 9.1.12 requires that all symbols appear after all strings in the
     // result.
     size_t initialLength = props.length();
-    for (Shape::Range<NoGC> r(pobj->lastProperty()); !r.empty(); r.popFront()) {
-      Shape& shape = r.front();
-      jsid id = shape.propid();
-      if (JSID_IS_SYMBOL(id)) {
-        if (!Enumerate<CheckForDuplicates>(cx, pobj, id, shape.enumerable(),
+    for (ShapePropertyIter<NoGC> iter(pobj->shape()); !iter.done(); iter++) {
+      jsid id = iter->key();
+      if (id.isSymbol()) {
+        if (!Enumerate<CheckForDuplicates>(cx, pobj, id, iter->enumerable(),
                                            flags, visited, props)) {
           return false;
         }
@@ -325,7 +319,7 @@ static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
 
 static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
                                       unsigned flags,
-                                      MutableHandle<IdSet> visited,
+                                      MutableHandle<PropertyKeySet> visited,
                                       MutableHandleIdVector props,
                                       bool checkForDuplicates) {
   if (checkForDuplicates) {
@@ -337,7 +331,7 @@ static bool EnumerateNativeProperties(JSContext* cx, HandleNativeObject pobj,
 template <bool CheckForDuplicates>
 static bool EnumerateProxyProperties(JSContext* cx, HandleObject pobj,
                                      unsigned flags,
-                                     MutableHandle<IdSet> visited,
+                                     MutableHandle<PropertyKeySet> visited,
                                      MutableHandleIdVector props) {
   MOZ_ASSERT(pobj->is<ProxyObject>());
 
@@ -351,7 +345,7 @@ static bool EnumerateProxyProperties(JSContext* cx, HandleObject pobj,
       return false;
     }
 
-    Rooted<PropertyDescriptor> desc(cx);
+    Rooted<mozilla::Maybe<PropertyDescriptor>> desc(cx);
     for (size_t n = 0, len = proxyProps.length(); n < len; n++) {
       bool enumerable = false;
 
@@ -360,7 +354,7 @@ static bool EnumerateProxyProperties(JSContext* cx, HandleObject pobj,
         if (!Proxy::getOwnPropertyDescriptor(cx, pobj, proxyProps[n], &desc)) {
           return false;
         }
-        enumerable = desc.enumerable();
+        enumerable = desc.isSome() && desc->enumerable();
       }
 
       if (!Enumerate<CheckForDuplicates>(cx, pobj, proxyProps[n], enumerable,
@@ -418,18 +412,19 @@ struct SortComparatorIds {
     }
 
     RootedString astr(cx), bstr(cx);
-    if (JSID_IS_SYMBOL(a)) {
-      MOZ_ASSERT(JSID_IS_SYMBOL(b));
-      JS::SymbolCode ca = JSID_TO_SYMBOL(a)->code();
-      JS::SymbolCode cb = JSID_TO_SYMBOL(b)->code();
+    if (a.isSymbol()) {
+      MOZ_ASSERT(b.isSymbol());
+      JS::SymbolCode ca = a.toSymbol()->code();
+      JS::SymbolCode cb = b.toSymbol()->code();
       if (ca != cb) {
         *lessOrEqualp = uint32_t(ca) <= uint32_t(cb);
         return true;
       }
-      MOZ_ASSERT(ca == JS::SymbolCode::InSymbolRegistry ||
+      MOZ_ASSERT(ca == JS::SymbolCode::PrivateNameSymbol ||
+                 ca == JS::SymbolCode::InSymbolRegistry ||
                  ca == JS::SymbolCode::UniqueSymbol);
-      astr = JSID_TO_SYMBOL(a)->description();
-      bstr = JSID_TO_SYMBOL(b)->description();
+      astr = a.toSymbol()->description();
+      bstr = b.toSymbol()->description();
       if (!astr || !bstr) {
         *lessOrEqualp = !astr;
         return true;
@@ -463,7 +458,7 @@ struct SortComparatorIds {
 
 static bool Snapshot(JSContext* cx, HandleObject pobj_, unsigned flags,
                      MutableHandleIdVector props) {
-  Rooted<IdSet> visited(cx, IdSet(cx));
+  Rooted<PropertyKeySet> visited(cx, PropertyKeySet(cx));
   RootedObject pobj(cx, pobj_);
 
   // Don't check for duplicates if we're only interested in own properties.
@@ -564,7 +559,7 @@ static bool Snapshot(JSContext* cx, HandleObject pobj_, unsigned flags,
   return true;
 }
 
-JS_FRIEND_API bool js::GetPropertyKeys(JSContext* cx, HandleObject obj,
+JS_PUBLIC_API bool js::GetPropertyKeys(JSContext* cx, HandleObject obj,
                                        unsigned flags,
                                        MutableHandleIdVector props) {
   return Snapshot(cx, obj,
@@ -584,9 +579,9 @@ static inline void RegisterEnumerator(ObjectRealm& realm, NativeIterator* ni) {
 
 static PropertyIteratorObject* NewPropertyIteratorObject(JSContext* cx) {
   const JSClass* clasp = &PropertyIteratorObject::class_;
-  RootedShape shape(cx, EmptyShape::getInitialShape(cx, clasp, cx->realm(),
-                                                    TaggedProto(nullptr),
-                                                    ITERATOR_FINALIZE_KIND));
+  RootedShape shape(cx, SharedShape::getInitialShape(cx, clasp, cx->realm(),
+                                                     TaggedProto(nullptr),
+                                                     ITERATOR_FINALIZE_KIND));
   if (!shape) {
     return nullptr;
   }
@@ -739,7 +734,8 @@ NativeIterator::NativeIterator(JSContext* cx,
 #endif
     HashNumber shapesHash = 0;
     do {
-      Shape* shape = pobj->as<NativeObject>().lastProperty();
+      MOZ_ASSERT(pobj->is<NativeObject>());
+      Shape* shape = pobj->shape();
       new (shapesEnd_) GCPtrShape(shape);
       shapesEnd_++;
 #ifdef DEBUG
@@ -811,7 +807,8 @@ static MOZ_ALWAYS_INLINE PropertyIteratorObject* LookupInIteratorCache(
       return nullptr;
     }
 
-    Shape* shape = pobj->as<NativeObject>().lastProperty();
+    MOZ_ASSERT(pobj->is<NativeObject>());
+    Shape* shape = pobj->shape();
     shapesHash = mozilla::AddToHash(shapesHash, HashIteratorShape(shape));
 
     if (MOZ_UNLIKELY(!shapes.append(shape))) {
@@ -1067,12 +1064,15 @@ PlainObject* Realm::createIterResultTemplateObject(
     return nullptr;
   }
 
+#ifdef DEBUG
   // Make sure that the properties are in the right slots.
-  DebugOnly<Shape*> shape = templateObject->lastProperty();
-  MOZ_ASSERT(shape->previous()->slot() == Realm::IterResultObjectValueSlot &&
-             shape->previous()->propidRef() == NameToId(cx->names().value));
-  MOZ_ASSERT(shape->slot() == Realm::IterResultObjectDoneSlot &&
-             shape->propidRef() == NameToId(cx->names().done));
+  ShapePropertyIter<NoGC> iter(templateObject->shape());
+  MOZ_ASSERT(iter->slot() == Realm::IterResultObjectDoneSlot &&
+             iter->key() == NameToId(cx->names().done));
+  iter++;
+  MOZ_ASSERT(iter->slot() == Realm::IterResultObjectValueSlot &&
+             iter->key() == NameToId(cx->names().value));
+#endif
 
   return templateObject;
 }
@@ -1412,12 +1412,13 @@ static bool SuppressDeletedProperty(JSContext* cx, NativeIterator* ni,
           return false;
         }
 
-        Rooted<PropertyDescriptor> desc(cx);
-        if (!GetPropertyDescriptor(cx, proto, id, &desc)) {
+        Rooted<mozilla::Maybe<PropertyDescriptor>> desc(cx);
+        RootedObject holder(cx);
+        if (!GetPropertyDescriptor(cx, proto, id, &desc, &holder)) {
           return false;
         }
 
-        if (desc.object() && desc.enumerable()) {
+        if (desc.isSome() && desc->enumerable()) {
           continue;
         }
       }
@@ -1484,7 +1485,7 @@ bool js::SuppressDeletedProperty(JSContext* cx, HandleObject obj, jsid id) {
     return true;
   }
 
-  if (JSID_IS_SYMBOL(id)) {
+  if (id.isSymbol()) {
     return true;
   }
 

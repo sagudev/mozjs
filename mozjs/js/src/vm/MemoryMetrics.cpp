@@ -16,12 +16,14 @@
 #include "gc/PublicIterators.h"
 #include "jit/BaselineJIT.h"
 #include "jit/Ion.h"
+#include "js/HeapAPI.h"
 #include "util/Text.h"
 #include "vm/ArrayObject.h"
 #include "vm/BigIntType.h"
 #include "vm/HelperThreadState.h"
 #include "vm/JSObject.h"
 #include "vm/JSScript.h"
+#include "vm/PropMap.h"
 #include "vm/Realm.h"
 #include "vm/Runtime.h"
 #include "vm/Shape.h"
@@ -44,7 +46,7 @@ using JS::ZoneStats;
 
 namespace js {
 
-JS_FRIEND_API size_t MemoryReportingSundriesThreshold() { return 8 * 1024; }
+JS_PUBLIC_API size_t MemoryReportingSundriesThreshold() { return 8 * 1024; }
 
 /* static */
 HashNumber InefficientNonFlatteningStringHashPolicy::hash(const Lookup& l) {
@@ -186,15 +188,15 @@ struct StatsClosure {
       : rtStats(rt), opv(v), anonymize(anon) {}
 };
 
-static void DecommittedArenasChunkCallback(JSRuntime* rt, void* data,
-                                           gc::TenuredChunk* chunk,
-                                           const JS::AutoRequireNoGC& nogc) {
+static void DecommittedPagesChunkCallback(JSRuntime* rt, void* data,
+                                          gc::TenuredChunk* chunk,
+                                          const JS::AutoRequireNoGC& nogc) {
   size_t n = 0;
-  for (uint32_t word : chunk->decommittedArenas.Storage()) {
+  for (uint32_t word : chunk->decommittedPages.Storage()) {
     n += mozilla::CountPopulation32(word);
   }
 
-  *static_cast<size_t*>(data) += n * gc::ArenaSize;
+  *static_cast<size_t*>(data) += n * gc::PageSize;
 }
 
 static void StatsZoneCallback(JSRuntime* rt, void* data, Zone* zone,
@@ -211,7 +213,8 @@ static void StatsZoneCallback(JSRuntime* rt, void* data, Zone* zone,
 
   zone->addSizeOfIncludingThis(
       rtStats->mallocSizeOf_, &zStats.code, &zStats.regexpZone, &zStats.jitZone,
-      &zStats.baselineStubsOptimized, &zStats.uniqueIdMap, &zStats.shapeTables,
+      &zStats.baselineStubsOptimized, &zStats.uniqueIdMap,
+      &zStats.initialPropMapTable, &zStats.shapeTables,
       &rtStats->runtime.atomsMarkBitmaps, &zStats.compartmentObjects,
       &zStats.crossCompartmentWrappersTables, &zStats.compartmentsPrivateData,
       &zStats.scriptCountsMap);
@@ -459,6 +462,27 @@ static void StatsCellCallback(JSRuntime* rt, void* data, JS::GCCellPtr cellptr,
       break;
     }
 
+    case JS::TraceKind::GetterSetter: {
+      zStats->getterSettersGCHeap += thingSize;
+      break;
+    }
+
+    case JS::TraceKind::PropMap: {
+      PropMap* map = &cellptr.as<PropMap>();
+      if (map->isDictionary()) {
+        zStats->dictPropMapsGCHeap += thingSize;
+      } else if (map->isCompact()) {
+        zStats->compactPropMapsGCHeap += thingSize;
+      } else {
+        MOZ_ASSERT(map->isNormal());
+        zStats->normalPropMapsGCHeap += thingSize;
+      }
+      map->addSizeOfExcludingThis(rtStats->mallocSizeOf_,
+                                  &zStats->propMapChildren,
+                                  &zStats->propMapTables);
+      break;
+    }
+
     case JS::TraceKind::JitCode: {
       zStats->jitCodesGCHeap += thingSize;
       // The code for a script is counted in ExecutableAllocator::sizeOfCode().
@@ -469,10 +493,10 @@ static void StatsCellCallback(JSRuntime* rt, void* data, JS::GCCellPtr cellptr,
       Shape* shape = &cellptr.as<Shape>();
 
       JS::ShapeInfo info;  // This zeroes all the sizes.
-      if (shape->inDictionary()) {
+      if (shape->isDictionary()) {
         info.shapesGCHeapDict += thingSize;
       } else {
-        info.shapesGCHeapTree += thingSize;
+        info.shapesGCHeapShared += thingSize;
       }
       shape->addSizeOfExcludingThis(rtStats->mallocSizeOf_, &info);
       zStats->shapeInfo.add(info);
@@ -635,8 +659,8 @@ static bool CollectRuntimeStatsHelper(JSContext* cx, RuntimeStats* rtStats,
       size_t(JS_GetGCParameter(cx, JSGC_UNUSED_CHUNKS)) * gc::ChunkSize;
 
   if (js::gc::DecommitEnabled()) {
-    IterateChunks(cx, &rtStats->gcHeapDecommittedArenas,
-                  DecommittedArenasChunkCallback);
+    IterateChunks(cx, &rtStats->gcHeapDecommittedPages,
+                  DecommittedPagesChunkCallback);
   }
 
   // Take the per-compartment measurements.
@@ -710,7 +734,7 @@ static bool CollectRuntimeStatsHelper(JSContext* cx, RuntimeStats* rtStats,
   // |gcHeapUnusedArenas| is the only thing left.  Compute it in terms of
   // all the others.  See the comment in RuntimeStats for explanation.
   rtStats->gcHeapUnusedArenas =
-      rtStats->gcHeapChunkTotal - rtStats->gcHeapDecommittedArenas -
+      rtStats->gcHeapChunkTotal - rtStats->gcHeapDecommittedPages -
       rtStats->gcHeapUnusedChunks -
       rtStats->zTotals.unusedGCThings.totalSize() - rtStats->gcHeapChunkAdmin -
       rtStats->zTotals.gcHeapArenaAdmin - rtStats->gcHeapGCThings;
