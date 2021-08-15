@@ -6508,7 +6508,9 @@ static bool GetTimeZone(JSContext* cx, unsigned argc, Value* vp) {
   auto getTimeZone = [](std::time_t* now) -> const char* {
     std::tm local{};
 #  if defined(_WIN32)
-    _tzset();
+#    ifndef JS_ENABLE_UWP
+       _tzset();
+#    endif
     if (localtime_s(&local, now) == 0) {
       return _tzname[local.tm_isdst > 0];
     }
@@ -6604,7 +6606,9 @@ static bool SetTimeZone(JSContext* cx, unsigned argc, Value* vp) {
   }
 
 #  if defined(_WIN32)
-  _tzset();
+#    ifndef JS_ENABLE_UWP
+       _tzset();
+#    endif
 #  else
   tzset();
 #  endif /* _WIN32 */

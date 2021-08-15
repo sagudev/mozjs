@@ -8,8 +8,13 @@
 #define util_GetPidProvider_h
 
 #ifdef XP_WIN
-#  include <process.h>
-#  define getpid _getpid
+#  ifndef JS_ENABLE_UWP
+#    include <process.h>
+#    define getpid _getpid
+#  else
+#   include <windows.h>
+#   define getpid GetCurrentProcessId
+#  endif
 #elif defined(__wasi__)
 #  define getpid() 1
 #else
