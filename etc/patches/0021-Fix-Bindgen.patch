@@ -1,0 +1,22 @@
+diff --git a/js/public/CompileOptions.h b/js/public/CompileOptions.h
+index e37c28a46..ca454c3a3 100644
+--- a/js/public/CompileOptions.h
++++ b/js/public/CompileOptions.h
+@@ -83,7 +83,7 @@ enum class AsmJSOption : uint8_t {
+  * Use this in code that needs to propagate compile options from one
+  * compilation unit to another.
+  */
+-class JS_PUBLIC_API TransitiveCompileOptions {
++class JS_PUBLIC_API __attribute__ ((__packed__)) TransitiveCompileOptions {
+  protected:
+   /**
+    * The Web Platform allows scripts to be loaded from arbitrary cross-origin
+@@ -204,7 +204,7 @@ class JS_PUBLIC_API TransitiveCompileOptions {
+  * is protected anyway); instead, create instances only of the derived classes:
+  * CompileOptions and OwningCompileOptions.
+  */
+-class JS_PUBLIC_API ReadOnlyCompileOptions : public TransitiveCompileOptions {
++class JS_PUBLIC_API __attribute__ ((__packed__)) ReadOnlyCompileOptions : public TransitiveCompileOptions {
+  public:
+   // POD options.
+   unsigned lineno = 1;
