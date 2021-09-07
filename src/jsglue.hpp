@@ -92,6 +92,15 @@ size_t GetLinearStringLength(JSLinearString* s);
 uint16_t GetLinearStringCharAt(JSLinearString* s, size_t idx);
 JSLinearString* AtomToLinearString(JSAtom* atom);
 
+/* This types are using maybe so we manually unwrap it in these wrappers */
+bool FromPropertyDescriptor(JSContext *cx, JS::Handle<JS::PropertyDescriptor> desc, JS::MutableHandle<JS::Value> vp);
+bool JS_GetOwnPropertyDescriptorById(JSContext* cx, JS::HandleObject obj, JS::HandleId id, JS::MutableHandle<JS::PropertyDescriptor> desc);
+bool JS_GetOwnPropertyDescriptor(JSContext* cx, JS::HandleObject obj, const char* name, JS::MutableHandle<JS::PropertyDescriptor> desc);
+bool JS_GetOwnUCPropertyDescriptor(JSContext* cx, JS::HandleObject obj, const char16_t* name, size_t namelen, JS::MutableHandle<JS::PropertyDescriptor> desc);
+bool JS_GetPropertyDescriptorById(JSContext* cx, JS::HandleObject obj, JS::HandleId id, JS::MutableHandle<JS::PropertyDescriptor> desc, JS::MutableHandleObject holder);
+bool JS_GetPropertyDescriptor(JSContext* cx, JS::HandleObject obj, const char* name, JS::MutableHandle<JS::PropertyDescriptor> desc, JS::MutableHandleObject holder);
+bool JS_GetUCPropertyDescriptor(JSContext* cx, JS::HandleObject obj, const char16_t* name, size_t namelen, JS::MutableHandle<JS::PropertyDescriptor> desc, JS::MutableHandleObject holder);
+bool SetPropertyIgnoringNamedGetter(JSContext* cx, JS::HandleObject obj, JS::HandleId id, JS::HandleValue v, JS::HandleValue receiver, JS::Handle<JS::PropertyDescriptor> ownDesc, JS::ObjectOpResult& result);
 }
 
 // There's a couple of classes from pre-57 releases of SM that bindgen can't deal with.
