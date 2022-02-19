@@ -87,6 +87,7 @@ jobs:
       # Because we've added files in previous run, we need to
       # check diff with `--staged`.
       run: |
+        git status --short
         git diff --staged --no-ext-diff --quiet --exit-code
   build_result:
     name: homu build finished
