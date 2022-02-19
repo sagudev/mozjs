@@ -35,8 +35,9 @@ def extract_tarball(tarball, commit):
             os.path.join(TARGET, ""),
         ])
 
+    
+    subprocess.check_call(["git", "add", "--all", TARGET], stdout=subprocess.DEVNULL)
     if commit:
-        subprocess.check_call(["git", "add", "--all", TARGET], stdout=subprocess.DEVNULL)
         subprocess.check_call(["git", "commit", "-m", "Update SpiderMonkey"], stdout=subprocess.DEVNULL)
 
 def apply_patches():
