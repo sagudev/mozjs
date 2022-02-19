@@ -83,10 +83,6 @@ jobs:
     - name: Apply patch
       run: |
         python3 ./etc/update.py --no-commit mozjs.tar.xz
-        git config core.ignorecase true
-        # Run `git add` here to force CRLF converted into LF
-        # so that we can check diff properly in next run
-        git add mozjs
     - name: Check patch integrity
       # Because we've added files in previous run, we need to
       # check diff with `--staged`.
