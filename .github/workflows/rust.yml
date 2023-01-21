@@ -20,7 +20,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Install deps
       run: brew install python autoconf@2.13 ccache llvm yasm
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@beta
     - name: ccache cache files
       uses: actions/cache@v1.1.0
       with:
@@ -43,7 +43,7 @@ jobs:
     - name: Install deps
       run: |
         sudo apt install autoconf2.13 ccache llvm -y
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@beta
     - name: ccache cache files
       uses: actions/cache@v1.1.0
       with:
@@ -73,7 +73,7 @@ jobs:
         .\install.ps1 -RunAsAdmin
         scoop install llvm@15.0.7 --global
         echo "C:\ProgramData\scoop\shims;C:\Users\runneradmin\scoop\shims" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@beta
     - name: Build uwp
       if: contains(matrix.target, 'uwp')
       shell: cmd
@@ -87,8 +87,8 @@ jobs:
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
         LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
-        rustup install nightly-2022-11-20
-        rustup default nightly-2022-11-20
+        rustup install nightly-2022-11-30
+        rustup default nightly-2022-11-30
         rustup component add rust-src
         rustc --version --verbose
         cargo build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
