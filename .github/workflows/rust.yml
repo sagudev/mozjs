@@ -16,16 +16,12 @@ jobs:
       fail-fast: false
       matrix:
         features: ["--features debugmozjs", ""]
-        #target: [""]
-        target: ["", "aarch64-uwp-windows-msvc", "x86_64-uwp-windows-msvc"]
+        target: [""]
+        #target: ["", "aarch64-uwp-windows-msvc", "x86_64-uwp-windows-msvc"]
     steps:
     - uses: actions/checkout@v2
     - uses: dtolnay/rust-toolchain@stable
       if: contains(matrix.target, 'uwp') != true
-    - uses: dtolnay/rust-toolchain@nightly-2022-11-20
-      if: contains(matrix.target, 'uwp')
-      with: 
-        components: "rust-src"
     - name: Install deps
       run: |
         Start-BitsTransfer -Source https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -Destination ./MozillaBuildSetup.exe
