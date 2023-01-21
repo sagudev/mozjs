@@ -10,51 +10,6 @@ env:
   SHELL: /bin/bash
 
 jobs:
-  mac:
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        features: ["--features debugmozjs", ""]
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install deps
-      run: brew install python autoconf@2.13 ccache llvm yasm
-    - uses: dtolnay/rust-toolchain@stable
-    - name: ccache cache files
-      uses: actions/cache@v1.1.0
-      with:
-        path: .ccache
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
-    - name: Build
-      run: |
-        ccache -z
-        ccache cargo build --verbose ${{ matrix.features }}
-        ccache cargo test --verbose ${{ matrix.features }}
-        ccache -s
-  linux:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        features: ["--features debugmozjs", ""]
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install deps
-      run: |
-        sudo apt install autoconf2.13 ccache llvm -y
-    - uses: dtolnay/rust-toolchain@stable
-    - name: ccache cache files
-      uses: actions/cache@v1.1.0
-      with:
-        path: .ccache
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
-    - name: Build
-      run: |
-        ccache -z
-        ccache cargo build --verbose ${{ matrix.features }}
-        ccache cargo test --verbose ${{ matrix.features }}
-        ccache -s
   windows:
     runs-on: windows-latest
     strategy:
@@ -65,6 +20,12 @@ jobs:
         target: ["", "aarch64-uwp-windows-msvc", "x86_64-uwp-windows-msvc"]
     steps:
     - uses: actions/checkout@v2
+    - uses: dtolnay/rust-toolchain@stable
+      if: contains(matrix.target, 'uwp') != true
+    - uses: dtolnay/rust-toolchain@nightly-2022-11-20
+      if: contains(matrix.target, 'uwp')
+      with: 
+        components: "rust-src"
     - name: Install deps
       run: |
         Start-BitsTransfer -Source https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -Destination ./MozillaBuildSetup.exe
@@ -73,7 +34,8 @@ jobs:
         .\install.ps1 -RunAsAdmin
         scoop install llvm@15.0.7 --global
         echo "C:\ProgramData\scoop\shims;C:\Users\runneradmin\scoop\shims" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-    - uses: dtolnay/rust-toolchain@stable
+        cargo install cargo-bisect-rustc
+        rustc --version --verbose
     - name: Build uwp
       if: contains(matrix.target, 'uwp')
       shell: cmd
@@ -87,11 +49,7 @@ jobs:
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
         LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
-        rustup install nightly-2022-11-20
-        rustup default nightly-2022-11-20
-        rustup component add rust-src
-        rustc --version --verbose
-        cargo build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
+        cargo bisect-rustc --start 2022-12-03 --end 2022-12-04 -- build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
     - name: Build Windows
       if: contains(matrix.target, 'uwp') != true
       shell: cmd
@@ -105,35 +63,4 @@ jobs:
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
         LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
-        cargo test --verbose ${{ matrix.features }} --lib
-  Integrity:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Get mozjs
-      run: |
-        bash ./mozjs/etc/get_mozjs.sh
-    - name: Apply patch
-      run: |
-        python3 ./mozjs/etc/update.py --no-commit mozjs.tar.xz
-        # Run `git add` here to force CRLF converted into LF
-        # so that we can check diff properly in next run
-        git add --all mozjs
-    - name: Check patch integrity
-      working-directory: ./mozjs
-      # Because we've added files in previous run, we need to
-      # check diff with `--staged`.
-      run: |
-        git diff --staged --no-ext-diff --quiet --exit-code
-  build_result:
-    name: homu build finished
-    runs-on: ubuntu-latest
-    # Integrity check is broken for the time being; don't require it.
-    needs: ["mac", "linux", "windows"]
-    steps:
-      - name: Mark the job as successful
-        run: exit 0
-        if: success()
-      - name: Mark the job as unsuccessful
-        run: exit 1
-        if: "!success()"
+        cargo bisect-rustc --start 2022-12-03 --end 2022-12-04 -- build --verbose ${{ matrix.features }} --lib
