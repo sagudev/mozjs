@@ -97,7 +97,7 @@ jobs:
         LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
         rustup install nightly-2022-11-20
-        rustup default nightly
+        rustup default nightly-2022-11-20
         rustup component add rust-src
         cargo build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
     - name: Build Windows
