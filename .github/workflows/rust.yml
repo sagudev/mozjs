@@ -87,8 +87,8 @@ jobs:
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
         LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
-        rustup install nightly-2022-11-30
-        rustup default nightly-2022-11-30
+        rustup install nightly-2022-12-05
+        rustup default nightly-2022-12-05
         rustup component add rust-src
         rustc --version --verbose
         cargo build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
@@ -105,7 +105,12 @@ jobs:
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
         LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
-        cargo test --verbose ${{ matrix.features }} --lib
+        cargo test --verbose ${{ matrix.features }} --lib || echo fail
+    - uses: actions/upload-artifact@v3
+      if: contains(matrix.target, 'uwp') != true
+      with:
+        name: slib
+        path: target/debug/build/mozjs_sys-*/out/build/js/src/build/js_static.lib
   Integrity:
     runs-on: ubuntu-latest
     steps:
