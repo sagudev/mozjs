@@ -50,4 +50,4 @@ jobs:
           PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
           LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
         run: |
-          cargo bisect-rustc -- build --verbose --features debugmozjs
+          cargo-bisect-rustc -- build --verbose --features debugmozjs
