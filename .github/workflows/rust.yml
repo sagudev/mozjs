@@ -20,7 +20,7 @@ jobs:
         #target: ["", "aarch64-uwp-windows-msvc", "x86_64-uwp-windows-msvc"]
     steps:
     - uses: actions/checkout@v2
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@nightly
       if: contains(matrix.target, 'uwp') != true
     - name: Install deps
       run: |
@@ -62,4 +62,4 @@ jobs:
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
         LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
-        cargo bisect-rustc -vv --start 2022-12-03 --end 2022-12-04 -- --verbose ${{ matrix.features }} --lib
+        cargo bisect-rustc -vv --start 2022-12-03 --end 2022-12-04 -- build --verbose ${{ matrix.features }} --lib
