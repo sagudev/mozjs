@@ -1,6 +1,6 @@
 name: Rust
 
-on: 
+on:
   push:
     branches-ignore: "master"
   pull_request:
@@ -15,51 +15,37 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: ["--features debugmozjs", ""]
+        #features: ["--features debugmozjs", ""]
         target: [""]
         #target: ["", "aarch64-uwp-windows-msvc", "x86_64-uwp-windows-msvc"]
     steps:
-    - uses: actions/checkout@v2
-    - uses: dtolnay/rust-toolchain@nightly
-      if: contains(matrix.target, 'uwp') != true
-    - name: Install deps
-      run: |
-        Start-BitsTransfer -Source https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -Destination ./MozillaBuildSetup.exe
-        .\MozillaBuildSetup.exe /S | Out-Null
-        iwr -useb get.scoop.sh -outfile 'install.ps1'
-        .\install.ps1 -RunAsAdmin
-        scoop install llvm@15.0.7 --global
-        echo "C:\ProgramData\scoop\shims;C:\Users\runneradmin\scoop\shims" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        rustc --version --verbose
-    - name: Install cargo-hakari
-      uses: baptiste0928/cargo-install@v1
-      with:
-        crate: cargo-bisect-rustc
-    - name: Build uwp
-      if: contains(matrix.target, 'uwp')
-      shell: cmd
-      env:
-        MOZTOOLS_PATH: 'C:\mozilla-build\msys\bin;C:\mozilla-build\bin'
-        AUTOCONF: "C:/mozilla-build/msys/local/bin/autoconf-2.13"
-        LINKER: "lld-link.exe"
-        CC: "clang-cl.exe"
-        CXX: "clang-cl.exe"
-        NATIVE_WIN32_PYTHON: "C:\\mozilla-build\\python2\\python.exe"
-        PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
-        LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
-      run: |
-        cargo bisect-rustc -v --start 2022-12-03 --end 2022-12-04 -- build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
-    - name: Build Windows
-      if: contains(matrix.target, 'uwp') != true
-      shell: cmd
-      env:
-        MOZTOOLS_PATH: 'C:\mozilla-build\msys\bin;C:\mozilla-build\bin'
-        AUTOCONF: "C:/mozilla-build/msys/local/bin/autoconf-2.13"
-        LINKER: "lld-link.exe"
-        CC: "clang-cl.exe"
-        CXX: "clang-cl.exe"
-        NATIVE_WIN32_PYTHON: "C:\\mozilla-build\\python2\\python.exe"
-        PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
-        LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
-      run: |
-        cargo bisect-rustc -vv --start 2022-12-03 --end 2022-12-04 -- build --verbose ${{ matrix.features }} --lib
+      - uses: actions/checkout@v2
+      - uses: dtolnay/rust-toolchain@nightly
+        if: contains(matrix.target, 'uwp') != true
+      - name: Install deps
+        run: |
+          Start-BitsTransfer -Source https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -Destination ./MozillaBuildSetup.exe
+          .\MozillaBuildSetup.exe /S | Out-Null
+          iwr -useb get.scoop.sh -outfile 'install.ps1'
+          .\install.ps1 -RunAsAdmin
+          scoop install llvm@15.0.7 --global
+          echo "C:\ProgramData\scoop\shims;C:\Users\runneradmin\scoop\shims" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          rustc --version --verbose
+      - name: Install cargo-hakari
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: cargo-bisect-rustc
+      - name: Build Windows
+        if: contains(matrix.target, 'uwp') != true
+        shell: cmd
+        env:
+          MOZTOOLS_PATH: 'C:\mozilla-build\msys\bin;C:\mozilla-build\bin'
+          AUTOCONF: "C:/mozilla-build/msys/local/bin/autoconf-2.13"
+          LINKER: "lld-link.exe"
+          CC: "clang-cl.exe"
+          CXX: "clang-cl.exe"
+          NATIVE_WIN32_PYTHON: "C:\\mozilla-build\\python2\\python.exe"
+          PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
+          LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
+        run: |
+          cargo bisect-rustc -vv --script=./test.sh --start 2022-12-03 --end 2022-12-04
