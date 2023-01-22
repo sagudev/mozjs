@@ -34,9 +34,6 @@ jobs:
         uses: baptiste0928/cargo-install@v1
         with:
           crate: cargo-bisect-rustc
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "2022-12-04"
       - name: Build Windows
         if: contains(matrix.target, 'uwp') != true
         shell: cmd
@@ -50,4 +47,4 @@ jobs:
           PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
           LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
         run: |
-          cargo-bisect-rustc -- build --verbose --features debugmozjs
+          cargo-bisect-rustc --start 2022-12-03 --end 2022-12-04 -- build --verbose --features debugmozjs
