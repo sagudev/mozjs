@@ -77,6 +77,7 @@ jobs:
     - run: |
         cargo install rustup-toolchain-install-master
         rustup-toolchain-install-master -c cargo e65225bb3f98a0001676c0cc139656e7209590c2
+        rustup default e65225bb3f98a0001676c0cc139656e7209590c2
     - name: Build uwp
       if: contains(matrix.target, 'uwp')
       shell: cmd
