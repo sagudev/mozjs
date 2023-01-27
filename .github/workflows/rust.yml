@@ -76,7 +76,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@nightly
     - run: |
         cargo install rustup-toolchain-install-master
-        rustup-toolchain-install-master e65225bb3f98a0001676c0cc139656e7209590c2 -c cargo
+        rustup-toolchain-install-master e65225bb3f98a0001676c0cc139656e7209590c2 -c rust-src cargo
         rustup default e65225bb3f98a0001676c0cc139656e7209590c2
     - name: Build uwp
       if: contains(matrix.target, 'uwp')
@@ -91,7 +91,6 @@ jobs:
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
         LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
-        rustup component add rust-src
         rustc --version --verbose
         cargo build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
     - name: Build Windows
