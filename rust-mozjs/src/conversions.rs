@@ -28,23 +28,23 @@
 
 #![deny(missing_docs)]
 
-use error::throw_type_error;
-use glue::RUST_JS_NumberValue;
-use jsapi::AssertSameCompartment;
-use jsapi::JS;
-use jsapi::{ForOfIterator, ForOfIterator_NonIterableBehavior};
-use jsapi::{Heap, JS_DefineElement, JS_GetLatin1StringCharsAndLength};
-use jsapi::{JSContext, JSObject, JSString, RootedObject, RootedValue};
-use jsapi::{JS_DeprecatedStringHasLatin1Chars, JS_NewUCStringCopyN, JSPROP_ENUMERATE};
-use jsapi::{JS_GetTwoByteStringCharsAndLength, NewArrayObject1};
-use jsval::{BooleanValue, Int32Value, NullValue, UInt32Value, UndefinedValue};
-use jsval::{JSVal, ObjectOrNullValue, ObjectValue, StringValue, SymbolValue};
+use crate::error::throw_type_error;
+use crate::glue::RUST_JS_NumberValue;
+use crate::jsapi::AssertSameCompartment;
+use crate::jsapi::JS;
+use crate::jsapi::{ForOfIterator, ForOfIterator_NonIterableBehavior};
+use crate::jsapi::{Heap, JS_DefineElement, JS_GetLatin1StringCharsAndLength};
+use crate::jsapi::{JSContext, JSObject, JSString, RootedObject, RootedValue};
+use crate::jsapi::{JS_DeprecatedStringHasLatin1Chars, JS_NewUCStringCopyN, JSPROP_ENUMERATE};
+use crate::jsapi::{JS_GetTwoByteStringCharsAndLength, NewArrayObject1};
+use crate::jsval::{BooleanValue, Int32Value, NullValue, UInt32Value, UndefinedValue};
+use crate::jsval::{JSVal, ObjectOrNullValue, ObjectValue, StringValue, SymbolValue};
 use libc;
 use num_traits::{Bounded, Zero};
-use rust::maybe_wrap_value;
-use rust::{maybe_wrap_object_or_null_value, maybe_wrap_object_value, ToString};
-use rust::{HandleValue, MutableHandleValue};
-use rust::{ToBoolean, ToInt32, ToInt64, ToNumber, ToUint16, ToUint32, ToUint64};
+use crate::rust::maybe_wrap_value;
+use crate::rust::{maybe_wrap_object_or_null_value, maybe_wrap_object_value, ToString};
+use crate::rust::{HandleValue, MutableHandleValue};
+use crate::rust::{ToBoolean, ToInt32, ToInt64, ToNumber, ToUint16, ToUint32, ToUint64};
 use std::borrow::Cow;
 use std::mem;
 use std::rc::Rc;

@@ -1,4 +1,4 @@
-use jsapi::*;
+use crate::jsapi::*;
 use std::os::raw::{c_char, c_void};
 use std::{mem, ptr};
 

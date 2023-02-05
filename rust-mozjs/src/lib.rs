@@ -58,9 +58,9 @@ pub mod glue;
 pub mod panic;
 pub mod typedarray;
 
-pub use consts::*;
+pub use crate::consts::*;
 pub use mozjs_sys::jsid;
 pub use mozjs_sys::jsval;
 
-pub use jsval::JS_ARGV;
-pub use jsval::JS_CALLEE;
+pub use crate::jsval::JS_ARGV;
+pub use crate::jsval::JS_CALLEE;
