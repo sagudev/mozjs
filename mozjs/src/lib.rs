@@ -2,6 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+// keep those here as they tell rust to link them
+#[allow(unused_extern_crates)]
+extern crate encoding_c;
+#[allow(unused_extern_crates)]
+extern crate encoding_c_mem;
+#[allow(unused_extern_crates)]
+extern crate libz_sys;
+
 // The jsimpls module just implements traits so can be private
 mod jsimpls;
 
