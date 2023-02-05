@@ -14,6 +14,8 @@ cc = "1"
 name = "minimal"
 [[example]]
 name = "eval"
+[[example]]
+name = "wasm"
 
 [[test]]
 name = "callback"
