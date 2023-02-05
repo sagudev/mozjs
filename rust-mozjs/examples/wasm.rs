@@ -6,14 +6,13 @@
 //! and do some setup on both of these. You also need to enter a "realm"
 //! (environment within one global object) before you can execute code.
 
-use std::ptr;
-use std::ptr::null_mut;
+use core::ptr;
+use core::ptr::null_mut;
 
-#[macro_use]
-extern crate mozjs;
 use mozjs::jsapi::*;
 use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
+use mozjs::rooted;
 use mozjs::rust::jsapi_wrapped::{Construct1, JS_GetProperty, JS_SetProperty};
 use mozjs::rust::SIMPLE_GLOBAL_CLASS;
 use mozjs::rust::{JSEngine, RealmOptions, Runtime};

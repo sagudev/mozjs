@@ -28,14 +28,6 @@
 //! [4]: https://github.com/mozilla-spidermonkey/spidermonkey-embedding-examples/
 //!
 
-#[macro_use]
-extern crate lazy_static;
-extern crate libc;
-#[macro_use]
-extern crate log;
-extern crate mozjs_sys;
-extern crate num_traits;
-
 pub mod jsapi {
     pub use mozjs_sys::jsapi::glue::*;
     pub use mozjs_sys::jsapi::js::detail::*;

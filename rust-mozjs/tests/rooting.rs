@@ -4,10 +4,6 @@
 
 #![cfg(feature = "debugmozjs")]
 
-extern crate libc;
-#[macro_use]
-extern crate mozjs;
-
 use std::ptr;
 
 use mozjs::jsapi::JSPROP_ENUMERATE;

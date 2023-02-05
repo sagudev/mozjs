@@ -1,6 +1,7 @@
 use crate::jsapi::*;
-use std::os::raw::{c_char, c_void};
-use std::{mem, ptr};
+use ::std::os::raw::{c_char, c_void};
+use ::std::ptr;
+use core::mem;
 
 pub enum Action {}
 unsafe impl Sync for ProxyTraps {}

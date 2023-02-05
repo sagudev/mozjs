@@ -2,19 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#[macro_use]
-extern crate mozjs;
-extern crate mozjs_sys;
-
 use std::ptr;
 
 use mozjs::jsapi::{
-    FromPropertyDescriptor, JS_DefineProperty, JS_GetPropertyDescriptor, JS_NewGlobalObject,
-    JS_NewPlainObject,
+    FromPropertyDescriptor, JSObject, JS_DefineProperty, JS_GetPropertyDescriptor,
+    JS_NewGlobalObject, JS_NewPlainObject,
 };
 use mozjs::jsapi::{JSAutoRealm, OnNewGlobalHookOption, PropertyDescriptor};
 use mozjs::jsapi::{JSPROP_ENUMERATE, JSPROP_PERMANENT, JSPROP_READONLY};
 use mozjs::jsval::{Int32Value, NullValue};
+use mozjs::rooted;
 use mozjs::rust::{JSEngine, RealmOptions, Runtime, SIMPLE_GLOBAL_CLASS};
 use mozjs_sys::jsapi::JS_GetProperty;
 
@@ -50,7 +47,7 @@ fn property_descriptor() {
 
         rooted!(in(context) let mut descriptor: PropertyDescriptor);
 
-        rooted!(in(context) let mut holder = ptr::null_mut());
+        rooted!(in(context) let mut holder = ptr::null_mut::<JSObject>());
         let mut is_none = true;
         assert!(JS_GetPropertyDescriptor(
             context,

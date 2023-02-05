@@ -4,6 +4,8 @@
 
 //! Rust wrappers around the raw JS apis
 
+use log::debug;
+use log::warn;
 use mozjs_sys::jsgc::IntoHandle as IntoRawHandle;
 use mozjs_sys::jsgc::IntoMutableHandle as IntoRawMutableHandle;
 use mozjs_sys::jsgc::RootKind;
@@ -60,17 +62,23 @@ use crate::jsapi::{ToUint32Slow, ToUint64Slow, ToWindowProxyIfWindowSlow};
 
 use crate::jsval::ObjectValue;
 
-use crate::glue::{AppendToRootedObjectVector, CallFunctionTracer, CallIdTracer, CallObjectRootTracer};
+use crate::glue::{
+    AppendToRootedObjectVector, CallFunctionTracer, CallIdTracer, CallObjectRootTracer,
+};
 use crate::glue::{CallObjectTracer, CallScriptTracer, CallStringTracer, CallValueRootTracer};
 use crate::glue::{CallValueTracer, CreateRootedIdVector, CreateRootedObjectVector};
 use crate::glue::{
     DeleteCompileOptions, DeleteRootedObjectVector, DescribeScriptedCaller, DestroyRootedIdVector,
 };
-use crate::glue::{GetIdVectorAddress, GetObjectVectorAddress, NewCompileOptions, SliceRootedIdVector};
+use crate::glue::{
+    GetIdVectorAddress, GetObjectVectorAddress, NewCompileOptions, SliceRootedIdVector,
+};
 
 use crate::panic::maybe_resume_unwind;
 
 use crate::default_heapsize;
+
+use lazy_static::lazy_static;
 
 pub use mozjs_sys::jsgc::{GCMethods, IntoHandle, IntoMutableHandle};
 
@@ -1576,7 +1584,9 @@ pub mod wrappers {
     use crate::jsapi::WasmModule;
     use crate::jsapi::{ElementAdder, IsArrayAnswer, PropertyDescriptor};
     use crate::jsapi::{JSContext, JSFunction, JSNative, JSObject, JSString};
-    use crate::jsapi::{JSStructuredCloneCallbacks, JSStructuredCloneReader, JSStructuredCloneWriter};
+    use crate::jsapi::{
+        JSStructuredCloneCallbacks, JSStructuredCloneReader, JSStructuredCloneWriter,
+    };
     use crate::jsapi::{MallocSizeOf, ObjectOpResult, ObjectPrivateVisitor, TabSizes};
     use crate::jsapi::{SavedFrameResult, SavedFrameSelfHosted};
     use std::os::raw::c_char;
@@ -1721,7 +1731,9 @@ pub mod jsapi_wrapped {
     use crate::jsapi::WasmModule;
     use crate::jsapi::{ElementAdder, IsArrayAnswer, PropertyDescriptor};
     use crate::jsapi::{JSContext, JSFunction, JSNative, JSObject, JSString};
-    use crate::jsapi::{JSStructuredCloneCallbacks, JSStructuredCloneReader, JSStructuredCloneWriter};
+    use crate::jsapi::{
+        JSStructuredCloneCallbacks, JSStructuredCloneReader, JSStructuredCloneWriter,
+    };
     use crate::jsapi::{MallocSizeOf, ObjectOpResult, ObjectPrivateVisitor, TabSizes};
     use crate::jsapi::{SavedFrameResult, SavedFrameSelfHosted};
     use std::os::raw::c_char;
