@@ -15,6 +15,7 @@ use mozjs::jsapi::{
     JSPropertySpec_Name, JSString, OnNewGlobalHookOption, Value,
 };
 use mozjs::jsval::JSVal;
+use mozjs::rooted;
 use mozjs::rust::{define_methods, JSEngine, RealmOptions, Runtime, SIMPLE_GLOBAL_CLASS};
 
 #[test]
