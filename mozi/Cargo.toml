@@ -1,0 +1,24 @@
+[package]
+name = "mozi"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+debugmozjs = ['mozjs/debugmozjs']
+jitspew = ['mozjs/jitspew']
+profilemozjs = ['mozjs/profilemozjs']
+uwp = ['mozjs/uwp']
+
+[dependencies]
+# mozjs stuff
+libc = "0.2"
+log = "0.4"
+num-traits = "0.2"
+mozjs = { path = "../rust-mozjs" }
+# wasi
+wasi-common = "5"
+wasmtime-wasi = "5"
+wiggle = "5"
+once_cell = "1"
+# cli
+#clap = { version = "3.2.0", features = ["color", "suggestions", "derive"] }

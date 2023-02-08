@@ -1,2 +1,2 @@
 [workspace]
-members = ["mozjs", "rust-mozjs"]
+members = ["mozjs", "rust-mozjs", "mozi"]
