@@ -86,7 +86,8 @@ impl ErrorInfo {
     }
 }
 
-// return true if exception was handled
+/// return true if exception was handled
+/// retrns false if there is no exception
 pub unsafe fn handle_exception(cx: *mut JSContext) -> bool {
     if JS_IsExceptionPending(cx) {
         rooted!(in(cx) let mut exception = UndefinedValue());
@@ -99,6 +100,8 @@ pub unsafe fn handle_exception(cx: *mut JSContext) -> bool {
                 error_info.filename, error_info.lineno, error_info.column, error_info.message
             );
             return true;
+        } else {
+            panic!("What exception?")
         }
     }
     false

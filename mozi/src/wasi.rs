@@ -1,12 +1,35 @@
-use std::ops::DerefMut;
+use std::sync::Mutex;
 
 use mozjs::jsapi::{CallArgs, JSContext, JS_DefineFunction, Value};
 use mozjs::jsval::UndefinedValue;
 use mozjs::rooted;
+use once_cell::sync::OnceCell;
 use wasi_common::snapshots::preview_1::wasi_snapshot_preview1::WasiSnapshotPreview1;
 use wasi_common::I32Exit;
+use wasi_common::WasiCtx;
 use wasmtime_wasi;
 use wiggle::{run_in_dummy_executor, GuestPtr};
+
+static WASI_CTX: OnceCell<Mutex<WasiCtx>> = OnceCell::new();
+
+// setter
+// TODO: one time there should be real otions passing here
+pub fn init_global_wasi_cx() -> bool {
+    let b = wasmtime_wasi::WasiCtxBuilder::new()
+        .inherit_stderr()
+        .inherit_args()
+        .unwrap()
+        .inherit_env()
+        .unwrap()
+        .inherit_stdio();
+    WASI_CTX.set(Mutex::new(b.build())).is_ok()
+}
+
+/// sexy getter
+fn wasi_ctx() -> &'static std::sync::Mutex<wasi_common::WasiCtx> {
+    WASI_CTX.get().unwrap()
+}
+
 /*
     (import "wasi_snapshot_preview1" "fd_write" (func $_ZN4wasi13lib_generated22wasi_snapshot_preview18fd_write17h10967bea88bd2a6fE (type $t8)))
   (import "wasi_snapshot_preview1" "environ_get" (func $__imported_wasi_snapshot_preview1_environ_get (type $t5)))
@@ -28,7 +51,7 @@ unsafe extern "C" fn proc_exit(_cx: *mut JSContext, argc: u32, vp: *mut Value) -
     let arg0 = arg0.to_int32() as u32;
 
     // call wasi_common function
-    let wasi_ctx = &mut *crate::C.get().unwrap().lock().unwrap();
+    let wasi_ctx = &mut *wasi_ctx().lock().unwrap();
     let res = run_in_dummy_executor(wasi_ctx.proc_exit(arg0)).unwrap();
 
     // this command is only excpetion where we need aditional work over the impl
@@ -69,15 +92,16 @@ unsafe extern "C" fn environ_get(cx: *mut JSContext, argc: u32, vp: *mut Value) 
     let arg1 = arg1.to_int32();
 
     // call wasi
-    let wasi_ctx = &mut *crate::C.get().unwrap().lock().unwrap();
+    let wasi_ctx = &mut *wasi_ctx().lock().unwrap();
     // here we need acces to wasm module instance to get acces to mem
     // maybe if I create them as a class specs there would be no problemm
-    cx.global();
-    let res = run_in_dummy_executor(wasi_ctx.environ_get(
+
+    todo!("environ_get");
+    /*let res = run_in_dummy_executor(wasi_ctx.environ_get(
         &GuestPtr::new(wasi_ctx.env, GuestPtr::new(wasi_ctx.env, 0)),
         &GuestPtr::<u8>::new(memory, arg0 as u32),
     ))
-    .unwrap();
+    .unwrap();*/
 
     // set return type
     args.rval().set(UndefinedValue());
@@ -98,9 +122,11 @@ unsafe extern "C" fn environ_sizes_get(cx: *mut JSContext, argc: u32, vp: *mut V
     debug_assert!(arg1.is_int32());
     let arg1 = arg1.to_int32();
 
+    todo!("environ_sizes_get");
+
     // call wasi_common function
-    let wasi_ctx = &mut *crate::C.get().unwrap().lock().unwrap();
-    let res = run_in_dummy_executor(wasi_ctx.environ_sizes_get(arg0, arg1)).unwrap();
+    let wasi_ctx = &mut *wasi_ctx().lock().unwrap();
+    let res = run_in_dummy_executor(wasi_ctx.environ_sizes_get()).unwrap();
     // set return type
     args.rval().set(UndefinedValue());
     true

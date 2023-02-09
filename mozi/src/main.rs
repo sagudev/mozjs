@@ -9,14 +9,15 @@ use mozjs::rooted;
 use mozjs::rust::jsapi_wrapped::{Construct1, JS_GetProperty, JS_SetProperty};
 use mozjs::rust::SIMPLE_GLOBAL_CLASS;
 use mozjs::rust::{JSEngine, RealmOptions, Runtime};
-use once_cell::sync::OnceCell;
-use wasi_common::WasiCtx;
 
 use crate::error::handle_exception;
+use crate::wasi::init_global_wasi_cx;
 use crate::wasi::populate_wasi_snap;
+use crate::wasm::init_global_wasm_ctx;
 
 mod error;
 mod wasi;
+mod wasm;
 
 /// ```rust
 /// fn main() {
@@ -25,19 +26,10 @@ mod wasi;
 ///```
 const HELLO_WASI: [u8; 2132663] = *include_bytes!("../hello.wasm");
 
-use ::std::sync::Mutex;
-
-static C: OnceCell<Mutex<WasiCtx>> = OnceCell::new();
-
 fn main() {
-    let b = wasmtime_wasi::WasiCtxBuilder::new()
-        .inherit_stderr()
-        .inherit_args()
-        .unwrap()
-        .inherit_env()
-        .unwrap()
-        .inherit_stdio();
-    assert!(C.set(Mutex::new(b.build())).is_ok());
+    //build wasi_ctx
+    assert!(init_global_wasi_cx());
+
     // init engine
     let engine = JSEngine::init().expect("failed to initalize JS engine");
     let rt = Runtime::new(engine.handle());
@@ -142,7 +134,13 @@ fn main() {
     });
     rooted!(in(rt.cx()) let mut exports_obj = exports.to_object());
 
+    // can we put mem to global and thenn access it from global
+    // w.exports.memory.buffer
+    // TODO: not all wasi (or just wasm) modules have memory.
+    init_global_wasm_ctx(rt.cx(), &exports_obj);
+
     // get main (entrypoint is named _start in WASI)
+    // TODO: not allways
     rooted!(in(rt.cx()) let mut main = UndefinedValue());
     assert!(unsafe {
         JS_GetProperty(
