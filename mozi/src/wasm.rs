@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::cell::UnsafeCell;
 
 use mozjs::jsapi::{JSContext, JSObject};
 use mozjs::jsval::UndefinedValue;
@@ -9,16 +9,29 @@ use once_cell::sync::OnceCell;
 use wiggle::borrow::BorrowChecker;
 use wiggle::GuestMemory;
 
-static WASM_CTX: OnceCell<Mutex<WasmCtx>> = OnceCell::new();
+static WASM_CTX: OnceCell<WasmCtx<'static>> = OnceCell::new();
 
-struct WasmCtx {
+/// sexy getter
+pub fn wasm_ctx() -> &'static WasmCtx<'static> {
+    WASM_CTX
+        .get()
+        .expect("WASM_CTX should be initialized by now.")
+}
+
+pub struct WasmCtx<'a> {
+    /// SAFETY: we have the borrow checker bellow
+    mem: &'a [UnsafeCell<u8>],
     /// Borrow checker for memory
     bc: BorrowChecker,
 }
 
-unsafe impl GuestMemory for WasmCtx {
+// These need to be reapplied due to the usage of `UnsafeCell` internally.
+unsafe impl Send for WasmCtx<'_> {}
+unsafe impl Sync for WasmCtx<'_> {}
+
+unsafe impl GuestMemory for WasmCtx<'_> {
     fn base(&self) -> &[std::cell::UnsafeCell<u8>] {
-        todo!()
+        self.mem
     }
 
     fn has_outstanding_borrows(&self) -> bool {
@@ -81,7 +94,31 @@ pub fn init_global_wasm_ctx(cx: *mut JSContext, exports_obj: &RootedGuard<*mut J
         )
     });
     rooted!(in(cx) let mut memory_buffer_obj = memory_buffer.to_object());
-    assert!(unsafe { mozjs::jsapi::IsArrayBufferObject(memory_buffer_obj.get()) });
+    debug_assert!(unsafe { mozjs::jsapi::IsArrayBufferObject(memory_buffer_obj.get()) });
+    //let size = unsafe { mozjs::jsapi::JS::GetArrayBufferByteLength(memory_buffer_obj.get()) };
+
+    let mut len: usize = 0;
+    unsafe {
+        // https://stackoverflow.com/questions/58530104/what-is-the-proper-way-to-use-a-pointer-to-pointer-in-a-foreign-function-in-rust
+        let mut mem: *mut u8 = std::ptr::null_mut();
+        let mem_ptr: *mut *mut u8 = &mut mem;
+        assert!(!mozjs::jsapi::JS::GetObjectAsArrayBuffer(
+            memory_buffer_obj.get(),
+            &mut len,
+            mem_ptr,
+        )
+        .is_null());
+
+        assert!(
+            WASM_CTX
+                .set(WasmCtx {
+                    mem: std::slice::from_raw_parts((mem as *const u8).cast(), len),
+                    bc: BorrowChecker::new(),
+                })
+                .is_ok(),
+            "WASM_CTX is full"
+        );
+    }
 
     // TODO: if we would ever need other stuff like table,global,...
     // we should create wasm_ctx struct (&wasi_ctx) and use it like

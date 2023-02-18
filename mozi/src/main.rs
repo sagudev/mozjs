@@ -28,9 +28,11 @@ const HELLO_WASI: [u8; 2132663] = *include_bytes!("../hello.wasm");
 
 fn main() {
     //build wasi_ctx
-    assert!(init_global_wasi_cx());
+    assert!(init_global_wasi_cx(), "WASI_CTX is full");
 
     // init engine
+    // TODO: pass some options to optimezie for wasm only
+    // myb no GC and other stupid stuff
     let engine = JSEngine::init().expect("failed to initalize JS engine");
     let rt = Runtime::new(engine.handle());
     assert!(!rt.cx().is_null(), "failed to create JSContext");
@@ -138,6 +140,7 @@ fn main() {
     // w.exports.memory.buffer
     // TODO: not all wasi (or just wasm) modules have memory.
     init_global_wasm_ctx(rt.cx(), &exports_obj);
+    println!("Executing");
 
     // get main (entrypoint is named _start in WASI)
     // TODO: not allways

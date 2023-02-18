@@ -27,7 +27,9 @@ pub fn init_global_wasi_cx() -> bool {
 
 /// sexy getter
 fn wasi_ctx() -> &'static std::sync::Mutex<wasi_common::WasiCtx> {
-    WASI_CTX.get().unwrap()
+    WASI_CTX
+        .get()
+        .expect("WASI_CTX should be initialized by now.")
 }
 
 /*
@@ -122,11 +124,13 @@ unsafe extern "C" fn environ_sizes_get(cx: *mut JSContext, argc: u32, vp: *mut V
     debug_assert!(arg1.is_int32());
     let arg1 = arg1.to_int32();
 
-    todo!("environ_sizes_get");
+    //todo!("environ_sizes_get");
 
     // call wasi_common function
     let wasi_ctx = &mut *wasi_ctx().lock().unwrap();
     let res = run_in_dummy_executor(wasi_ctx.environ_sizes_get()).unwrap();
+
+    rooted!(in(cx) let rval = 5);
     // set return type
     args.rval().set(UndefinedValue());
     true
