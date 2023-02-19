@@ -61,3 +61,4 @@ libc = "0.2"
 log = "0.4"
 num-traits = "0.2"
 mozjs_sys = { path = "../mozjs" }
+jstraceable_derive = { path = "./jstraceable_derive" }

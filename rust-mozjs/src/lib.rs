@@ -33,6 +33,7 @@ extern crate lazy_static;
 extern crate libc;
 #[macro_use]
 extern crate log;
+extern crate jstraceable_derive;
 extern crate mozjs_sys;
 extern crate num_traits;
 
@@ -56,6 +57,7 @@ pub mod conversions;
 pub mod error;
 pub mod glue;
 pub mod panic;
+pub mod trace;
 pub mod typedarray;
 
 pub use consts::*;
