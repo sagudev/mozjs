@@ -59,6 +59,11 @@ jobs:
         cargo test --verbose ${{ matrix.features }}
   windows:
     runs-on: windows-latest
+    env:
+      MOZTOOLS_PATH: 'C:\mozilla-build\msys\bin;C:\mozilla-build\bin'
+      AUTOCONF: "C:/mozilla-build/msys/local/bin/autoconf-2.13"
+      NATIVE_WIN32_PYTHON: "C:\\mozilla-build\\python2\\python.exe"
+      PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
     strategy:
       fail-fast: false
       matrix:
@@ -78,12 +83,14 @@ jobs:
       uses: KyleMayes/install-llvm-action@v1
       with:
         version: "15.0.6"
-        env: true
     - name: Install deps
       run: |
         Start-BitsTransfer -Source https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -Destination ./MozillaBuildSetup.exe
         .\MozillaBuildSetup.exe /S | Out-Null
         echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
+        echo "LINKER=${{ env.LLVM_PATH }}/lld-link.exe"
+        echo "CC=${{ env.LLVM_PATH }}/clang-cl.exe"
+        echo "CXX=${{ env.LLVM_PATH }}/clang-cl.exe"
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
       with:
@@ -91,24 +98,12 @@ jobs:
     - name: Build uwp
       if: contains(matrix.target, 'uwp')
       shell: cmd
-      env:
-        MOZTOOLS_PATH: 'C:\mozilla-build\msys\bin;C:\mozilla-build\bin'
-        AUTOCONF: "C:/mozilla-build/msys/local/bin/autoconf-2.13"
-        LINKER: "lld-link.exe"
-        NATIVE_WIN32_PYTHON: "C:\\mozilla-build\\python2\\python.exe"
-        PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
       run: |
         rustc --version --verbose
         cargo build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
     - name: Build Windows
       if: contains(matrix.target, 'uwp') != true
       shell: cmd
-      env:
-        MOZTOOLS_PATH: 'C:\mozilla-build\msys\bin;C:\mozilla-build\bin'
-        AUTOCONF: "C:/mozilla-build/msys/local/bin/autoconf-2.13"
-        LINKER: "lld-link.exe"
-        NATIVE_WIN32_PYTHON: "C:\\mozilla-build\\python2\\python.exe"
-        PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
       run: |
         cargo test --verbose ${{ matrix.features }}
   Integrity:
