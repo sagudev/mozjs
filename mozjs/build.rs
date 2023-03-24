@@ -207,6 +207,9 @@ fn build_jsapi(build_dir: &Path) {
 fn build_jsglue(build_dir: &Path) {
     let mut build = cc::Build::new();
     build.cpp(true);
+    println!("cargo:warning=CXX_{}", build.get_compiler().path().display());
+    println!("CXX: {}", build.get_compiler().path().display());
+    eprintln!("CXX: {}", build.get_compiler().path().display());
 
     for flag in cc_flags() {
         build.flag_if_supported(flag);
