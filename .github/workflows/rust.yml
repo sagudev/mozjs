@@ -88,9 +88,9 @@ jobs:
         Start-BitsTransfer -Source https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -Destination ./MozillaBuildSetup.exe
         .\MozillaBuildSetup.exe /S | Out-Null
         echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
-        echo "LINKER=${{ env.LLVM_PATH }}/lld-link.exe"
-        echo "CC=${{ env.LLVM_PATH }}/clang-cl.exe"
-        echo "CXX=${{ env.LLVM_PATH }}/clang-cl.exe"
+        echo "LINKER=${{ env.LLVM_PATH }}\lld-link.exe"
+        echo "CC=${{ env.LLVM_PATH }}\clang.exe"
+        echo "CXX=${{ env.LLVM_PATH }}\clang.exe"
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
       with:
