@@ -78,10 +78,7 @@ jobs:
       run: |
         Start-BitsTransfer -Source https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -Destination ./MozillaBuildSetup.exe
         .\MozillaBuildSetup.exe /S | Out-Null
-        iwr -useb get.scoop.sh -outfile 'install.ps1'
-        .\install.ps1 -RunAsAdmin
-        scoop install llvm@$15.0.7 --global
-        echo "C:\ProgramData\scoop\shims;C:\Users\runneradmin\scoop\shims" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
       with:
@@ -97,7 +94,6 @@ jobs:
         CXX: "clang-cl.exe"
         NATIVE_WIN32_PYTHON: "C:\\mozilla-build\\python2\\python.exe"
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
-        LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
         rustc --version --verbose
         cargo build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
@@ -112,7 +108,6 @@ jobs:
         CXX: "clang-cl.exe"
         NATIVE_WIN32_PYTHON: "C:\\mozilla-build\\python2\\python.exe"
         PYTHON3: "C:\\mozilla-build\\python3\\python3.exe"
-        LIBCLANG_PATH: "C:\\ProgramData\\scoop\\apps\\llvm\\current\\lib"
       run: |
         cargo test --verbose ${{ matrix.features }}
   Integrity:
