@@ -97,6 +97,8 @@ jobs:
       if: contains(matrix.target, 'uwp') != true
       env:
         SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
+        SCCACHE_LOG: debug
+        SCCACHE_START_SERVER: 1
       shell: cmd
       run: |
         cargo build -vv
