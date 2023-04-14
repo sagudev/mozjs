@@ -95,6 +95,8 @@ jobs:
         cargo build -vv ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
     - name: Build Windows
       if: contains(matrix.target, 'uwp') != true
+      env:
+        SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
       shell: cmd
       run: |
         cargo build -vv
