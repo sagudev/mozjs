@@ -93,6 +93,14 @@ jobs:
       run: |
         rustc --version --verbose
         cargo build -vv ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
+    - name: SCCACHE Windows
+      if: contains(matrix.target, 'uwp') != true
+      env:
+        SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
+        SCCACHE_LOG: debug
+        SCCACHE_START_SERVER: 1
+      shell: cmd
+      run: sccache
     - name: Build Windows
       if: contains(matrix.target, 'uwp') != true
       env:
@@ -100,7 +108,6 @@ jobs:
         SCCACHE_LOG: debug
       shell: cmd
       run: |
-        SCCACHE_LOG=debug SCCACHE_START_SERVER=1 SCCACHE_NO_DAEMON=1 sccache
         cargo build -vv
         cargo test -vv ${{ matrix.features }}
     - uses: actions/upload-artifact@v3
