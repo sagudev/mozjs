@@ -98,9 +98,9 @@ jobs:
       env:
         SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
         SCCACHE_LOG: debug
-        SCCACHE_START_SERVER: 1
       shell: cmd
       run: |
+        SCCACHE_LOG=debug SCCACHE_START_SERVER=1 SCCACHE_NO_DAEMON=1 sccache
         cargo build -vv
         cargo test -vv ${{ matrix.features }}
     - uses: actions/upload-artifact@v3
