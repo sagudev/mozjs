@@ -12,7 +12,6 @@ env:
   SCCACHE_GHA_ENABLED: "true"
   CCACHE: sccache
   CARGO_INCREMENTAL: 0
-  SCCACHE_VERSION: "v0.4.0"
 
 jobs:
   mac:
@@ -29,8 +28,6 @@ jobs:
       run: brew install python autoconf@2.13 llvm yasm
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
-      with:
-        version: ${{ env.SCCACHE_VERSION }}
     - name: Build
       run: |
         cargo build --verbose ${{ matrix.features }}
@@ -51,8 +48,6 @@ jobs:
         sudo apt install autoconf2.13 llvm -y
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
-      with:
-        version: ${{ env.SCCACHE_VERSION }}
     - name: Build
       run: |
         cargo build --verbose ${{ matrix.features }}
@@ -66,6 +61,8 @@ jobs:
         #target: [""]
         target: ["", "aarch64-uwp-windows-msvc", "x86_64-uwp-windows-msvc"]
     env:
+        SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
+        SCCACHE_LOG: "debug"
         RUSTC_WRAPPER: "sccache"
         MOZTOOLS_PATH: 'C:\mozilla-build\msys\bin;C:\mozilla-build\bin'
         AUTOCONF: "C:/mozilla-build/msys/local/bin/autoconf-2.13"
@@ -90,19 +87,23 @@ jobs:
         echo 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Tools\LLVM\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
-      with:
-        version: ${{ env.SCCACHE_VERSION }}
     - name: Build uwp
       if: contains(matrix.target, 'uwp')
       shell: cmd
       run: |
         rustc --version --verbose
-        cargo build --verbose ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
+        cargo build -vv ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
     - name: Build Windows
       if: contains(matrix.target, 'uwp') != true
       shell: cmd
       run: |
-        cargo test --verbose ${{ matrix.features }}
+        cargo build -vv
+        cargo test -vv ${{ matrix.features }}
+    - uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: sccache_log_t${{ matrix.target }}_f${{ matrix.features }}
+        path: /tmp/sccache_log.txt
   Integrity:
     runs-on: ubuntu-latest
     steps:
