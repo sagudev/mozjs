@@ -61,8 +61,8 @@ jobs:
         #target: [""]
         target: ["", "aarch64-uwp-windows-msvc", "x86_64-uwp-windows-msvc"]
     env:
-        #SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
-        #SCCACHE_LOG: "debug"
+        SCCACHE_ERROR_LOG: "C:/mozilla-build/sccache_log.txt"
+        SCCACHE_LOG: "debug"
         RUSTC_WRAPPER: "sccache"
         MOZTOOLS_PATH: 'C:\mozilla-build\msys\bin;C:\mozilla-build\bin'
         AUTOCONF: "C:/mozilla-build/msys/local/bin/autoconf-2.13"
@@ -93,19 +93,19 @@ jobs:
       run: |
         rustc --version --verbose
         cargo build -vv ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
-    - name: SCCACHE Windows
-      if: contains(matrix.target, 'uwp') != true
-      env:
-        SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
-        SCCACHE_LOG: debug
-        SCCACHE_START_SERVER: 1
-      shell: cmd
-      run: sccache
+    #- name: SCCACHE Windows
+    #  if: contains(matrix.target, 'uwp') != true
+    #  env:
+    #    SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
+    #    SCCACHE_LOG: debug
+    #    SCCACHE_START_SERVER: 1
+    #  shell: cmd
+    #  run: sccache
     - name: Build Windows
       if: contains(matrix.target, 'uwp') != true
-      env:
-        SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
-        SCCACHE_LOG: debug
+      #env:
+      #  SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
+      #  SCCACHE_LOG: debug
       shell: cmd
       run: |
         cargo build -vv
@@ -114,7 +114,7 @@ jobs:
       if: always()
       with:
         name: sccache_log_t${{ matrix.target }}_f${{ matrix.features }}
-        path: /tmp/sccache_log.txt
+        path: "C:/mozilla-build/sccache_log.txt"
   Integrity:
     runs-on: ubuntu-latest
     steps:
