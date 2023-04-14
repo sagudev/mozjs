@@ -56,4 +56,4 @@ jobs:
       if: always()
       with:
         name: sccache_log
-        path: "C:/mozilla-build/sccache_log${{ matrix.d }}.txt"
+        path: "C:/mozilla-build/sccache_log.txt"
