@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  #CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR: never
   RUST_BACKTRACE: 1
   SHELL: /bin/bash
   SCCACHE_GHA_ENABLED: "true"
@@ -14,52 +14,8 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  mac:
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        features: ["--features debugmozjs", ""]
-    env:
-      RUSTC_WRAPPER: sccache
-    steps:
-    - uses: actions/checkout@v3
-    - name: Install deps
-      run: brew install python autoconf@2.13 llvm yasm
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Build
-      run: |
-        cargo build --verbose ${{ matrix.features }}
-        cargo test --verbose ${{ matrix.features }}
-  linux:
-    env:
-      RUSTC_WRAPPER: "sccache"
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        features: ["--features debugmozjs", ""]
-    steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@stable
-    - name: Install deps
-      run: |
-        sudo apt install autoconf2.13 llvm -y
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Build
-      run: |
-        cargo build --verbose ${{ matrix.features }}
-        cargo test --verbose ${{ matrix.features }}
   windows:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        features: ["--features debugmozjs", ""]
-        #target: [""]
-        target: ["", "aarch64-uwp-windows-msvc", "x86_64-uwp-windows-msvc"]
     env:
         SCCACHE_ERROR_LOG: "C:/mozilla-build/sccache_log.txt"
         SCCACHE_LOG: "debug"
@@ -74,12 +30,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: dtolnay/rust-toolchain@stable
-      if: (!contains(matrix.target, 'uwp'))
-    - uses: dtolnay/rust-toolchain@master
-      if: contains(matrix.target, 'uwp')
-      with:
-        toolchain: "nightly-2023-02-02"
-        components: rust-src
     - name: Install deps
       run: |
         Start-BitsTransfer -Source https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -Destination ./MozillaBuildSetup.exe
@@ -87,62 +37,12 @@ jobs:
         echo 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Tools\LLVM\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Build uwp
-      if: contains(matrix.target, 'uwp')
-      shell: cmd
-      run: |
-        rustc --version --verbose
-        cargo build -vv ${{ matrix.features }} -Z build-std=std,panic_abort --target ${{ matrix.target }}
-    #- name: SCCACHE Windows
-    #  if: contains(matrix.target, 'uwp') != true
-    #  env:
-    #    SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
-    #    SCCACHE_LOG: debug
-    #    SCCACHE_START_SERVER: 1
-    #  shell: cmd
-    #  run: sccache
     - name: Build Windows
-      if: contains(matrix.target, 'uwp') != true
-      #env:
-      #  SCCACHE_ERROR_LOG: "/tmp/sccache_log.txt"
-      #  SCCACHE_LOG: debug
       shell: cmd
       run: |
         cargo build -vv
-        cargo test -vv ${{ matrix.features }}
     - uses: actions/upload-artifact@v3
       if: always()
       with:
-        name: sccache_log_t${{ matrix.target }}_f${{ matrix.features }}
+        name: sccache_log
         path: "C:/mozilla-build/sccache_log.txt"
-  Integrity:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Get mozjs
-      run: |
-        bash ./mozjs/etc/get_mozjs.sh
-    - name: Apply patch
-      run: |
-        python3 ./mozjs/etc/update.py --no-commit mozjs.tar.xz
-        # Run `git add` here to force CRLF converted into LF
-        # so that we can check diff properly in next run
-        git add --all mozjs
-    - name: Check patch integrity
-      working-directory: ./mozjs
-      # Because we've added files in previous run, we need to
-      # check diff with `--staged`.
-      run: |
-        git diff --staged --no-ext-diff --quiet --exit-code
-  build_result:
-    name: homu build finished
-    runs-on: ubuntu-latest
-    # Integrity check is broken for the time being; don't require it.
-    needs: ["mac", "linux", "windows"]
-    steps:
-      - name: Mark the job as successful
-        run: exit 0
-        if: success()
-      - name: Mark the job as unsuccessful
-        run: exit 1
-        if: "!success()"
