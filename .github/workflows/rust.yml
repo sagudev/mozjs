@@ -39,7 +39,7 @@ jobs:
       if: contains(matrix.d, 'sccache')
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Build Windows (debug sccache)
-      if: matrix.d == 'debug'
+      if: contains(matrix.d, 'debug')
       env:
         SCCACHE_ERROR_LOG: "C:/mozilla-build/sccache_log.txt"
         SCCACHE_LOG: "debug"
