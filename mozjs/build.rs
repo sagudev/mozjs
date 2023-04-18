@@ -58,11 +58,11 @@ fn main() {
     build_jsglue(&build_dir);
     build_jsapi_bindings(&build_dir);
 
-    if env::var_os("MOZJS_FORCE_RERUN").is_none() {
-        for var in ENV_VARS {
-            println!("cargo:rerun-if-env-changed={}", var);
-        }
+    for var in ENV_VARS {
+        println!("cargo:rerun-if-env-changed={}", var);
+    }
 
+    if env::var_os("MOZJS_FORCE_RERUN").is_none() {
         for entry in WalkDir::new("mozjs") {
             let entry = entry.unwrap();
             let path = entry.path();
