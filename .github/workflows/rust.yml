@@ -38,7 +38,7 @@ jobs:
     - name: Run sccache-cache
       if: contains(matrix.d, 'sccache')
       #uses: mozilla-actions/sccache-action@v0.0.3
-      run: cargo install --git "https://github.com/Xuanwo/cccache.git" --branch "don't-try-to-read-ar-files"
+      run: cargo install --git "https://github.com/Xuanwo/cccache.git" sccacche --branch "don't-try-to-read-ar-files"
     - name: Build Windows (debug sccache)
       if: contains(matrix.d, 'debug')
       env:
