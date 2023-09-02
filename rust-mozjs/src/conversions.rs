@@ -25,6 +25,8 @@
 //! | symbol                  | `*mut Symbol`                    |
 //! | nullable types          | `Option<T>`                      |
 //! | sequences               | `Vec<T>`                         |
+//!
+//! There is also Definable which can be used to separate defined and undefined
 
 #![deny(missing_docs)]
 
@@ -47,6 +49,7 @@ use rust::{maybe_wrap_object_or_null_value, maybe_wrap_object_value, ToString};
 use rust::{HandleValue, MutableHandleValue};
 use rust::{ToBoolean, ToInt32, ToInt64, ToNumber, ToUint16, ToUint32, ToUint64};
 use std::borrow::Cow;
+use std::default;
 use std::mem;
 use std::rc::Rc;
 use std::{ptr, slice};
@@ -777,5 +780,88 @@ impl FromJSValConvertible for *mut JS::Symbol {
         }
 
         Ok(ConversionResult::Success(value.to_symbol()))
+    }
+}
+
+/// Definable to be used to separate defined and undefined
+///
+/// This is different then [`Option<T>`] where
+/// `null` or `undefined` -> `None`, but `None` -> `null`
+#[derive(Copy, Debug, Default, Hash, Clone)]
+pub enum Definable<T> {
+    /// Represents only `undefined` value
+    ///
+    /// when converted to Option this is None
+    #[default]
+    Undefined,
+    /// Represents defined value which can also be null
+    ///
+    /// when converted to Option this is Some(T)
+    Defined(T),
+}
+
+impl<T> Definable<T> {
+    /// Converts [`Definable<T>`] to [`Option<T>`]
+    /// so you can use all methods that are available for Option in definable context
+    pub fn as_option(self) -> Option<T> {
+        match self {
+            Self::Undefined => None,
+            Self::Defined(def) => Some(def),
+        }
+    }
+
+    /// Converts [`&Definable<T>`] to [`Option<&T>`]
+    /// so you can use all methods that are available for Option in definable context
+    pub fn as_ref_option(&self) -> Option<&T> {
+        match self {
+            Self::Undefined => None,
+            Self::Defined(def) => Some(def),
+        }
+    }
+
+    /// Converts [`&mut Definable<T>`] to [`Option<&mut T>`]
+    /// so you can use all methods that are available for Option in definable context
+    pub fn as_mut_option(&mut self) -> Option<&mut T> {
+        match self {
+            Self::Undefined => None,
+            Self::Defined(def) => Some(def),
+        }
+    }
+}
+
+impl<T> From<Option<T>> for Definable<T> {
+    fn from(a: Option<T>) -> Self {
+        match a {
+            Some(x) => Self::Defined(x),
+            None => Self::Undefined,
+        }
+    }
+}
+
+impl<T: ToJSValConvertible> ToJSValConvertible for Definable<T> {
+    #[inline]
+    unsafe fn to_jsval(&self, cx: *mut JSContext, mut rval: MutableHandleValue) {
+        match self {
+            &Self::Defined(ref value) => value.to_jsval(cx, rval),
+            &Self::Undefined => rval.set(UndefinedValue()),
+        }
+    }
+}
+
+impl<T: FromJSValConvertible> FromJSValConvertible for Definable<T> {
+    type Config = T::Config;
+    unsafe fn from_jsval(
+        cx: *mut JSContext,
+        value: HandleValue,
+        option: T::Config,
+    ) -> Result<ConversionResult<Definable<T>>, ()> {
+        if value.get().is_undefined() {
+            Ok(ConversionResult::Success(Self::Undefined))
+        } else {
+            Ok(match FromJSValConvertible::from_jsval(cx, value, option)? {
+                ConversionResult::Success(v) => ConversionResult::Success(Self::Defined(v)),
+                ConversionResult::Failure(v) => ConversionResult::Failure(v),
+            })
+        }
     }
 }
