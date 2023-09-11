@@ -1,0 +1,8 @@
+task:
+  arm_container:
+    image: rust:latest
+    cpu: 2
+  pre_script:
+    apt-get update && apt-get -y install python build-essential clang
+  build_script:
+    cargo test --verbose
