@@ -2,7 +2,6 @@ name: Rust
 
 on:
   push:
-    branches: [master]
   pull_request:
   workflow_dispatch:
   merge_group:
@@ -25,7 +24,7 @@ jobs:
       CCACHE: sccache
       SCCACHE_GHA_ENABLED: "true"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install deps
         run: brew install python llvm yasm
       - name: Run sccache-cache
@@ -45,7 +44,7 @@ jobs:
       matrix:
         features: ["--features debugmozjs", ""]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install deps
         run: |
@@ -70,7 +69,7 @@ jobs:
       CCACHE: sccache
       SCCACHE_GHA_ENABLED: "true"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install deps
         run: |
@@ -86,7 +85,7 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
@@ -102,12 +101,37 @@ jobs:
         run: |
           ./android-build cargo build --target="armv7-linux-androideabi"
 
+  arm64:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["--features debugmozjs", ""]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: arm64
+      - name: Test
+        uses: addnab/docker-run-action@v3
+        with:
+          image: arm64v8/rust:latest
+          options: |
+            --platform linux/arm64
+            --volume ${{ github.workspace }}:/build
+            --workdir /build
+          run: |
+            apt-get update && apt-get -y install python build-essential clang llvm
+            cargo test --verbose ${{ matrix.features }}
+
   # The integrity check is currently broken. See issue #345.
   #
   # Integrity:
   #   runs-on: ubuntu-latest
   #   steps:
-  #   - uses: actions/checkout@v3
+  #   - uses: actions/checkout@v4
   #   - name: Get mozjs
   #     run: |
   #       bash ./mozjs/etc/get_mozjs.sh
