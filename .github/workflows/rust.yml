@@ -107,23 +107,24 @@ jobs:
       fail-fast: false
       matrix:
         features: ["--features debugmozjs", ""]
+        platform: ["arm64"]
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
         with:
-          platforms: arm64
+          platforms: ${{ matrix.platform }}
       - name: Test
         uses: addnab/docker-run-action@v3
         with:
-          image: arm64v8/rust:latest
+          image: rust:latest
           options: |
-            --platform linux/arm64
+            --platform linux/${{ matrix.platform }}
             --volume ${{ github.workspace }}:/build
             --workdir /build
           run: |
-            apt-get update && apt-get -y install python build-essential clang llvm
+            uname -a
+            apt-get update && apt-get -y install python-is-python3 build-essential clang llvm
             cargo test --verbose ${{ matrix.features }}
 
   # The integrity check is currently broken. See issue #345.
