@@ -26,7 +26,7 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_VERSION: "v0.4.0"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install deps
         run: brew install python llvm yasm
       - name: Run sccache-cache
@@ -49,7 +49,7 @@ jobs:
       matrix:
         features: ["--features debugmozjs", ""]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install deps
         run: |
@@ -76,7 +76,7 @@ jobs:
       CXX: "clang-cl"
       MOZTOOLS_PATH: "${{ github.workspace }}\\target\\dependencies\\moztools-4.0"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         if: (!contains(matrix.target, 'uwp'))
       - uses: dtolnay/rust-toolchain@master
@@ -107,7 +107,7 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
@@ -122,6 +122,31 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           ./android-build cargo build --target="armv7-linux-androideabi"
+
+  arm64:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["--features debugmozjs", ""]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: arm64
+      - name: Test
+        uses: addnab/docker-run-action@v3
+        with:
+          image: arm64v8/rust:latest
+          options: |
+            --platform linux/arm64
+            --volume ${{ github.workspace }}:/build
+            --workdir /build
+          run: |
+            apt-get update && apt-get -y install python build-essential clang
+            cargo test --verbose ${{ matrix.features }}
 
   # The integrity check is currently broken. See issue #345.
   #
@@ -148,7 +173,7 @@ jobs:
   build_result:
     name: Result
     runs-on: ubuntu-latest
-    needs: ["mac", "linux", "windows", "android"]
+    needs: ["mac", "linux", "windows", "android", "arm64"]
     if: ${{ always() }}
     steps:
       - name: Mark the job as successful
