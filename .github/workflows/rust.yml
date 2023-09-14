@@ -18,7 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/sagudev/aarch64
     steps:
-      - run: apt install -y curl
+      - run: |
+          apt install -y curl
+          ls -la
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
