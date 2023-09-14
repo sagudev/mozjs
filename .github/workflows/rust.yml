@@ -28,8 +28,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target.rust }}
+      # sudo dpkg --add-architecture ${{ matrix.target.deb }}
       - run: |
-          sudo dpkg --add-architecture ${{ matrix.target.deb }}
           sudo apt update
           sudo apt install -y gcc-${{ matrix.target.gnu }}-linux-gnu g++-${{ matrix.target.gnu }}-linux-gnu gcc-arm-linux-gnueabihf qemu-user qemu-user-static
       - uses: docker/setup-qemu-action@v3
