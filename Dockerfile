@@ -9,7 +9,7 @@ RUN echo 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main unive
     echo 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security main universe multiverse restricted' >> /etc/apt/sources.list
 RUN dpkg --add-architecture arm64
 # add for actions
-RUN apt update && apt install --no-install-recommends -y curl git && apt-get clean
+RUN apt update && apt install -y curl git && apt-get clean
 # add main build deps
 RUN apt install --no-install-recommends -y build-essential pkg-config m4 python3 python3-distutils llvm llvm-dev lld libclang-dev clang && apt-get clean
 # add cross deps
