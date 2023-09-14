@@ -16,7 +16,7 @@ are in the [rust-mozjs directory][r-m].
 Install Python, Clang and `build-essential`, for example on a Debian-based Linux:
 
 ```sh
-sudo apt-get install build-essential python3 python3-distutils llvm libclang-dev clang
+sudo apt-get install build-essential pkg-config m4 python3 python3-distutils llvm llvm-dev lld libclang-dev clang
 ```
 
 If you have more than one version of Clang installed, you can set the `LIBCLANG_PATH`

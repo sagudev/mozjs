@@ -16,30 +16,37 @@ jobs:
   cross:
     name: Cross ${{ matrix.target.rust }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - {
-              rust: aarch64-unknown-linux-gnu,
-              deb: arm64,
-              gnu: aarch64-linux-gnu,
-            }
-          - {
-              rust: armv7-unknown-linux-gnueabihf,
-              deb: armhf,
-              gnu: arm-linux-gnueabihf,
-            }
+    container: ghcr.io/sagudev/aarch64
     steps:
-      - uses: actions/checkout@v3
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target.rust }}
-      # sudo dpkg --add-architecture ${{ matrix.target.deb }}
-      - run: |
-          sudo apt update
-          sudo apt install -y libc6-${{ matrix.target.deb }}-cross llvm gcc-${{ matrix.target.gnu }} g++-${{ matrix.target.gnu }} qemu-user qemu-user-static
-      - uses: docker/setup-qemu-action@v3
-      - run: cargo build --target ${{ matrix.target.rust }}
-      - run: cargo test --target ${{ matrix.target.rust }}
+          targets: aarch64-unknown-linux-gnu
+      - run: cargo test --target aarch64-unknown-linux-gnu
+    # strategy:
+    #   fail-fast: false
+    #   matrix:
+    #     target:
+    #       - {
+    #           rust: aarch64-unknown-linux-gnu,
+    #           deb: arm64,
+    #           gnu: aarch64-linux-gnu,
+    #         }
+    #       - {
+    #           rust: armv7-unknown-linux-gnueabihf,
+    #           deb: armhf,
+    #           gnu: arm-linux-gnueabihf,
+    #         }
+    # steps:
+    #   - uses: actions/checkout@v3
+    #   - name: Install Rust
+    #     uses: dtolnay/rust-toolchain@stable
+    #     with:
+    #       targets: ${{ matrix.target.rust }}
+    #   # sudo dpkg --add-architecture ${{ matrix.target.deb }}
+    #   - run: |
+    #       sudo apt update
+    #       sudo apt install -y libc6-${{ matrix.target.deb }}-cross llvm gcc-${{ matrix.target.gnu }} g++-${{ matrix.target.gnu }} qemu-user qemu-user-static
+    #   - uses: docker/setup-qemu-action@v3
+    #   - run: cargo build --target ${{ matrix.target.rust }}
+    #   - run: cargo test --target ${{ matrix.target.rust }}
