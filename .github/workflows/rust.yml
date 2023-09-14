@@ -108,14 +108,19 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - aarch64-unknown-linux-gnu
-          - armv7-unknown-linux-gnueabihf
+          - { rust: aarch64-unknown-linux-gnu, deb: arm64, gnu: aarch64 }
+          - { rust: armv7-unknown-linux-gnueabihf, deb: armhf, gnu: arm }
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.target.rust }}
+      - run: |
+          sudo dpkg --add-architecture ${{ matrix.target.deb }}
+          sudo apt update
+          sudo apt install -y gcc-${{ matrix.target.gnu }}-linux-gnu g++-${{ matrix.target.gnu }}-linux-gnu gcc-arm-linux-gnueabihf qemu-user qemu-user-static
+      - uses: docker/setup-qemu-action@v3
       - run: cargo build --target ${{ matrix.target }}
 
   # The integrity check is currently broken. See issue #345.
