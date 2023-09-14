@@ -39,7 +39,7 @@ jobs:
       # sudo dpkg --add-architecture ${{ matrix.target.deb }}
       - run: |
           sudo apt update
-          sudo apt install -y llvm gcc-${{ matrix.target.gnu }} g++-${{ matrix.target.gnu }} qemu-user qemu-user-static
+          sudo apt install -y libc6-${{ matrix.target.deb }}-cross llvm gcc-${{ matrix.target.gnu }} g++-${{ matrix.target.gnu }} qemu-user qemu-user-static
       - uses: docker/setup-qemu-action@v3
       - run: cargo build --target ${{ matrix.target.rust }}
       - run: cargo test --target ${{ matrix.target.rust }}
