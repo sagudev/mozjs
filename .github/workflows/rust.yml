@@ -14,7 +14,7 @@ env:
 
 jobs:
   cross:
-    name: Cross ${{ matrix.target }}
+    name: Cross ${{ matrix.target.rust }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
