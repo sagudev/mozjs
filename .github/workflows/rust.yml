@@ -19,8 +19,8 @@ jobs:
     container: ghcr.io/sagudev/aarch64
     steps:
       - run: |
-          apt install -y curl
-          ls -la
+          apt install -y curl git
+      - uses: actions/checkout@v4
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
