@@ -16,7 +16,7 @@ index 333a5ea49..4f0940df1 100644
 @@ -90,16 +94,20 @@ set_config("ANDROID_NDK", ndk)
  
  
- @depends(ndk)
+-@depends(ndk)
 +@depends("--with-android-ndk-version", ndk)
  @checking("for android ndk version")
  @imports(_from="__builtin__", _import="open")

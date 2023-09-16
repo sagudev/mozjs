@@ -93,7 +93,6 @@ def ndk(value):
 set_config("ANDROID_NDK", ndk)
 
 
-@depends(ndk)
 @depends("--with-android-ndk-version", ndk)
 @checking("for android ndk version")
 @imports(_from="__builtin__", _import="open")
