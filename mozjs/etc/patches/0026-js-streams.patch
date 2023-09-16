@@ -1628,7 +1628,7 @@ index 000000000..268960624
 +#include "builtin/streams/MiscellaneousOperations.h"
 +
 +#include "mozilla/Assertions.h"     // MOZ_ASSERT
-+#include "mozilla/FloatingPoint.h"  // mozilla::IsNaN
++#include "mozilla/FloatingPoint.h"  // std::isnan
 +
 +#include "js/CallAndConstruct.h"      // JS::IsCallable
 +#include "js/Conversions.h"           // JS::ToNumber
@@ -1767,7 +1767,7 @@ index 000000000..268960624
 +
 +  // Step 2: If highWaterMark is NaN or highWaterMark < 0, throw a RangeError
 +  // exception.
-+  if (mozilla::IsNaN(*highWaterMark) || *highWaterMark < 0) {
++  if (std::isnan(*highWaterMark) || *highWaterMark < 0) {
 +    JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
 +                              JSMSG_STREAM_INVALID_HIGHWATERMARK);
 +    return false;
@@ -2249,7 +2249,7 @@ index 000000000..db99d3a8a
 +
 +  // Step 3: If ! IsFiniteNonNegativeNumber(size) is false, throw a RangeError
 +  //         exception.
-+  if (size < 0 || mozilla::IsNaN(size) || mozilla::IsInfinite(size)) {
++  if (size < 0 || std::isnan(size) || std::isfinite(size)) {
 +    JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
 +                              JSMSG_NUMBER_MUST_BE_FINITE_NON_NEGATIVE, "size");
 +    return false;

@@ -9,7 +9,7 @@
 #include "builtin/streams/MiscellaneousOperations.h"
 
 #include "mozilla/Assertions.h"     // MOZ_ASSERT
-#include "mozilla/FloatingPoint.h"  // mozilla::IsNaN
+#include "mozilla/FloatingPoint.h"  // std::isnan
 
 #include "js/CallAndConstruct.h"      // JS::IsCallable
 #include "js/Conversions.h"           // JS::ToNumber
@@ -148,7 +148,7 @@ using JS::Value;
 
   // Step 2: If highWaterMark is NaN or highWaterMark < 0, throw a RangeError
   // exception.
-  if (mozilla::IsNaN(*highWaterMark) || *highWaterMark < 0) {
+  if (std::isnan(*highWaterMark) || *highWaterMark < 0) {
     JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
                               JSMSG_STREAM_INVALID_HIGHWATERMARK);
     return false;
