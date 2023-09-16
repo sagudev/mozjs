@@ -184,6 +184,8 @@ fn build_jsapi(build_dir: &Path) {
         paths.extend(env::split_paths(&env::var_os("PATH").unwrap()));
         env::set_var("PATH", &env::join_paths(paths).unwrap());
 
+        env::set_var("MOZILLA_BUILD", moztools);
+
         make = OsStr::new("mozmake").to_os_string();
     }
 
