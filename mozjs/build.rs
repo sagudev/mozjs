@@ -58,6 +58,8 @@ fn main() {
     build_jsglue(&build_dir);
     build_jsapi_bindings(&build_dir);
 
+    panic!("verify")
+
     if env::var_os("MOZJS_FORCE_RERUN").is_none() {
         for var in ENV_VARS {
             println!("cargo:rerun-if-env-changed={}", var);
