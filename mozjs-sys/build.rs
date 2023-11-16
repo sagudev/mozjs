@@ -49,7 +49,7 @@ fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let build_dir = out_dir.join("build");
 
-    // Used by mozjs downstream, don't remove.
+    // Used by mozjs, don't remove.
     println!("cargo:outdir={}", build_dir.display());
 
     fs::create_dir_all(&build_dir).expect("could not create build dir");
@@ -96,11 +96,7 @@ fn find_make() -> OsString {
 }
 
 fn cc_flags() -> Vec<&'static str> {
-    let mut result = vec!["-DRUST_BINDGEN", "-DSTATIC_JS_API"];
-
-    if env::var_os("CARGO_FEATURE_DEBUGMOZJS").is_some() {
-        result.extend(&["-DJS_GC_ZEAL", "-DDEBUG", "-DJS_DEBUG"]);
-    }
+    let mut result = vec![];
 
     let target = env::var("TARGET").unwrap();
     if target.contains("windows") {
@@ -122,10 +118,7 @@ fn cc_flags() -> Vec<&'static str> {
         ]);
     }
 
-    let is_apple = target.contains("apple");
-    let is_freebsd = target.contains("freebsd");
-
-    if is_apple || is_freebsd {
+    if target.contains("apple") || target.contains("freebsd") {
         result.push("-stdlib=libc++");
     }
 
@@ -240,7 +233,6 @@ fn build_jsapi(build_dir: &Path) {
         .arg(cargo_manifest_dir.join("makefile.cargo"))
         .current_dir(&build_dir)
         .env("SRC_DIR", &cargo_manifest_dir.join("mozjs"))
-        .env("NO_RUST_PANIC_HOOK", "1")
         .status()
         .expect(&format!("Failed to run `{:?}`", make));
     assert!(result.success());

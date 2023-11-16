@@ -5,22 +5,8 @@
 use std::env;
 use std::path::PathBuf;
 
-fn cc_flags(bindgen: bool) -> Vec<&'static str> {
-    let mut result = vec!["-DSTATIC_JS_API"];
-
-    if env::var("CARGO_FEATURE_DEBUGMOZJS").is_ok() {
-        result.push("-DDEBUG");
-
-        // bindgen doesn't like this
-        if !bindgen {
-            if cfg!(target_os = "windows") {
-                result.push("-Od");
-            } else {
-                result.push("-g");
-                result.push("-O0");
-            }
-        }
-    }
+fn cc_flags() -> Vec<&'static str> {
+    let mut result = vec![];
 
     if env::var("CARGO_FEATURE_PROFILEMOZJS").is_ok() {
         result.push("-fno-omit-frame-pointer");
@@ -44,7 +30,7 @@ fn main() {
         .cpp(true)
         .file("src/jsglue.cpp")
         .include(&include_path);
-    for flag in cc_flags(false) {
+    for flag in cc_flags() {
         build.flag_if_supported(flag);
     }
 
@@ -74,7 +60,7 @@ fn main() {
         .formatter(bindgen::Formatter::Rustfmt)
         .clang_arg("-x")
         .clang_arg("c++")
-        .clang_args(cc_flags(true))
+        .clang_args(cc_flags())
         .clang_args(["-I", &include_path.to_string_lossy()])
         .enable_cxx_namespaces()
         .allowlist_file("./src/jsglue.cpp")
