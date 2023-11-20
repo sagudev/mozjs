@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 fn cc_flags(outdir: &str, bindgen: bool, msvc: bool) -> Vec<String> {
     let include_path: PathBuf = [&outdir, "dist", "include"].iter().collect();
-    let mut result = vec![format!("-I {}", include_path.to_string_lossy())];
+    let mut result = vec![format!("-I{}", include_path.to_string_lossy())];
 
     let confdefs_path: PathBuf = [&outdir, "js", "src", "js-confdefs.h"].iter().collect();
     if msvc {
