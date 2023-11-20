@@ -164,7 +164,7 @@ fn find_make() -> OsString {
     // https://searchfox.org/mozilla-esr115/source/python/mozbuild/mozbuild/util.py#1396
     env::set_var("MOZILLABUILD", moztools);
 
-    make = OsStr::new("mozmake").to_os_string();
+    OsStr::new("mozmake").to_os_string()
 }
 
 #[cfg(not(windows))]
