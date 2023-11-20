@@ -49,7 +49,7 @@ fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let build_dir = out_dir.join("build");
 
-    // Used by mozjs downstream, don't remove.
+    // Used by mozjs, don't remove.
     println!("cargo:outdir={}", build_dir.display());
 
     fs::create_dir_all(&build_dir).expect("could not create build dir");
@@ -77,26 +77,8 @@ fn main() {
     }
 }
 
-#[cfg(not(windows))]
-fn find_make() -> OsString {
-    if let Some(make) = env::var_os("MAKE") {
-        make
-    } else {
-        match Command::new("gmake").status() {
-            Ok(gmake) => {
-                if gmake.success() {
-                    OsStr::new("gmake").to_os_string()
-                } else {
-                    OsStr::new("make").to_os_string()
-                }
-            }
-            Err(_) => OsStr::new("make").to_os_string(),
-        }
-    }
-}
-
 fn cc_flags() -> Vec<&'static str> {
-    let mut result = vec!["-DRUST_BINDGEN", "-DSTATIC_JS_API"];
+    let mut result = vec![];
 
     if env::var_os("CARGO_FEATURE_DEBUGMOZJS").is_some() {
         result.extend(&["-DJS_GC_ZEAL", "-DDEBUG", "-DJS_DEBUG"]);
@@ -122,10 +104,7 @@ fn cc_flags() -> Vec<&'static str> {
         ]);
     }
 
-    let is_apple = target.contains("apple");
-    let is_freebsd = target.contains("freebsd");
-
-    if is_apple || is_freebsd {
+    if target.contains("apple") || target.contains("freebsd") {
         result.push("-stdlib=libc++");
     }
 
@@ -133,20 +112,18 @@ fn cc_flags() -> Vec<&'static str> {
 }
 
 #[cfg(windows)]
-fn cargo_target_dir() -> PathBuf {
-    let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let mut dir = out_dir.as_path();
-    while let Some(target_dir) = dir.parent() {
-        if target_dir.file_name().unwrap().to_string_lossy() == "target" {
-            return target_dir.to_path_buf();
-        }
-        dir = target_dir;
-    }
-    panic!("$OUT_DIR is not in target")
-}
-
-#[cfg(windows)]
 fn find_moztools() -> Option<PathBuf> {
+    fn cargo_target_dir() -> PathBuf {
+        let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
+        let mut dir = out_dir.as_path();
+        while let Some(target_dir) = dir.parent() {
+            if target_dir.file_name().unwrap().to_string_lossy() == "target" {
+                return target_dir.to_path_buf();
+            }
+            dir = target_dir;
+        }
+        panic!("$OUT_DIR is not in target")
+    }
     let cargo_target_dir = cargo_target_dir();
     let deps_dir = cargo_target_dir.join("dependencies");
     let moztools_path = deps_dir.join("moztools").join(MOZTOOLS_VERSION);
@@ -158,50 +135,65 @@ fn find_moztools() -> Option<PathBuf> {
     }
 }
 
+#[cfg(windows)]
+fn find_make() -> OsString {
+    let moztools = if let Some(moztools) = env::var_os("MOZTOOLS_PATH") {
+        PathBuf::from(moztools)
+    } else if let Some(moztools) = find_moztools() {
+        // moztools already in target/dependencies/moztools-*
+        moztools
+    } else if let Some(moz_build) = env::var_os("MOZILLABUILD") {
+        // For now we also support mozilla build
+        PathBuf::from(moz_build)
+    } else if let Some(moz_build) = env::var_os("MOZILLA_BUILD") {
+        // For now we also support mozilla build
+        PathBuf::from(moz_build)
+    } else {
+        panic!(
+            "MozTools or MozillaBuild not found!\n \
+            Follow instructions on: https://github.com/servo/mozjs?tab=readme-ov-file#windows"
+        );
+    };
+    // set windows env
+    let mut paths = Vec::new();
+    paths.push(moztools.join("msys2").join("usr").join("bin"));
+    paths.push(moztools.join("bin"));
+    paths.extend(env::split_paths(&env::var_os("PATH").unwrap()));
+    env::set_var("PATH", &env::join_paths(paths).unwrap());
+
+    // https://searchfox.org/mozilla-esr115/source/python/mozbuild/mozbuild/util.py#1396
+    env::set_var("MOZILLABUILD", moztools);
+
+    make = OsStr::new("mozmake").to_os_string();
+}
+
+#[cfg(not(windows))]
+fn find_make() -> OsString {
+    if let Some(make) = env::var_os("MAKE") {
+        make
+    } else {
+        match Command::new("gmake").status() {
+            Ok(gmake) => {
+                if gmake.success() {
+                    OsStr::new("gmake").to_os_string()
+                } else {
+                    OsStr::new("make").to_os_string()
+                }
+            }
+            Err(_) => OsStr::new("make").to_os_string(),
+        }
+    }
+}
+
 fn build_jsapi(build_dir: &Path) {
     let target = env::var("TARGET").unwrap();
-    let make;
-
-    #[cfg(windows)]
-    {
-        let moztools = if let Some(moztools) = env::var_os("MOZTOOLS_PATH") {
-            PathBuf::from(moztools)
-        } else if let Some(moztools) = find_moztools() {
-            // moztools already in target/dependencies/moztools-*
-            moztools
-        } else if let Some(moz_build) = env::var_os("MOZILLABUILD") {
-            // For now we also support mozilla build
-            PathBuf::from(moz_build)
-        } else if let Some(moz_build) = env::var_os("MOZILLA_BUILD") {
-            // For now we also support mozilla build
-            PathBuf::from(moz_build)
-        } else {
-            panic!(
-                "MozTools or MozillaBuild not found!\n \
-                Follow instructions on: https://github.com/servo/mozjs?tab=readme-ov-file#windows"
-            );
-        };
-        let mut paths = Vec::new();
-        paths.push(moztools.join("msys2").join("usr").join("bin"));
-        paths.push(moztools.join("bin"));
-        paths.extend(env::split_paths(&env::var_os("PATH").unwrap()));
-        env::set_var("PATH", &env::join_paths(paths).unwrap());
-
-        // https://searchfox.org/mozilla-esr115/source/python/mozbuild/mozbuild/util.py#1396
-        env::set_var("MOZILLABUILD", moztools);
-
-        make = OsStr::new("mozmake").to_os_string();
-    }
-
-    #[cfg(not(windows))]
-    {
-        make = find_make();
-    }
+    let make = find_make();
 
     let mut cmd = Command::new(make.clone());
 
-    let encoding_c_mem_include_dir = env::var("DEP_ENCODING_C_MEM_INCLUDE_DIR").unwrap();
     let mut cppflags = OsString::from("-I");
+    // encoding_c
+    let encoding_c_mem_include_dir = env::var("DEP_ENCODING_C_MEM_INCLUDE_DIR").unwrap();
     cppflags.push(OsString::from(
         encoding_c_mem_include_dir.replace("\\", "/"),
     ));
@@ -223,6 +215,7 @@ fn build_jsapi(build_dir: &Path) {
         }
         cmd.env("PKG_CONFIG_PATH", pkg_config_path);
     }
+
     cppflags.push(env::var_os("CPPFLAGS").unwrap_or_default());
     cmd.env("CPPFLAGS", cppflags);
 
@@ -240,7 +233,6 @@ fn build_jsapi(build_dir: &Path) {
         .arg(cargo_manifest_dir.join("makefile.cargo"))
         .current_dir(&build_dir)
         .env("SRC_DIR", &cargo_manifest_dir.join("mozjs"))
-        .env("NO_RUST_PANIC_HOOK", "1")
         .status()
         .expect(&format!("Failed to run `{:?}`", make));
     assert!(result.success());

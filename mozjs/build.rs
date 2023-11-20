@@ -5,31 +5,46 @@
 use std::env;
 use std::path::PathBuf;
 
-fn cc_flags(bindgen: bool) -> Vec<&'static str> {
-    let mut result = vec!["-DSTATIC_JS_API"];
+fn cc_flags(outdir: &str, bindgen: bool, msvc: bool) -> Vec<String> {
+    let include_path: PathBuf = [&outdir, "dist", "include"].iter().collect();
+    let mut result = vec![format!("-I {}", include_path.to_string_lossy())];
+
+    let confdefs_path: PathBuf = [&outdir, "js", "src", "js-confdefs.h"].iter().collect();
+    if msvc {
+        result.push(format!("-FI{}", confdefs_path.to_string_lossy()));
+        result.push("-DWIN32".to_owned());
+        result.push("-Zi".to_owned());
+        result.push("-GR-".to_owned());
+        result.push("-std:c++17".to_owned());
+    } else {
+        result.push("-fPIC".to_owned());
+        result.push("-fno-rtti".to_owned());
+        result.push("-std=c++17".to_owned());
+        result.push(format!("-include {}", confdefs_path.to_string_lossy()));
+    };
 
     if env::var("CARGO_FEATURE_DEBUGMOZJS").is_ok() {
-        result.push("-DDEBUG");
+        result.push("-DDEBUG".to_owned());
 
         // bindgen doesn't like this
         if !bindgen {
-            if cfg!(target_os = "windows") {
-                result.push("-Od");
+            if msvc {
+                result.push("-Od".to_owned());
             } else {
-                result.push("-g");
-                result.push("-O0");
+                result.push("-g".to_owned());
+                result.push("-O0".to_owned());
             }
         }
     }
 
     if env::var("CARGO_FEATURE_PROFILEMOZJS").is_ok() {
-        result.push("-fno-omit-frame-pointer");
+        result.push("-fno-omit-frame-pointer".to_owned());
     }
 
-    result.push("-Wno-c++0x-extensions");
-    result.push("-Wno-return-type-c-linkage");
-    result.push("-Wno-invalid-offsetof");
-    result.push("-Wno-unused-parameter");
+    result.push("-Wno-c++0x-extensions".to_owned());
+    result.push("-Wno-return-type-c-linkage".to_owned());
+    result.push("-Wno-invalid-offsetof".to_owned());
+    result.push("-Wno-unused-parameter".to_owned());
 
     result
 }
@@ -38,32 +53,13 @@ fn main() {
     //let mut build = cxx_build::bridge("src/jsglue.rs"); // returns a cc::Build;
     let mut build = cc::Build::new();
     let outdir = env::var("DEP_MOZJS_OUTDIR").unwrap();
-    let include_path: PathBuf = [&outdir, "dist", "include"].iter().collect();
 
-    build
-        .cpp(true)
-        .file("src/jsglue.cpp")
-        .include(&include_path);
-    for flag in cc_flags(false) {
+    build.cpp(true).file("src/jsglue.cpp");
+
+    let msvc = build.get_compiler().is_like_msvc();
+    for flag in &cc_flags(&outdir, false, msvc) {
         build.flag_if_supported(flag);
     }
-
-    let confdefs_path: PathBuf = [&outdir, "js", "src", "js-confdefs.h"].iter().collect();
-    let msvc = if build.get_compiler().is_like_msvc() {
-        build.flag(&format!("-FI{}", confdefs_path.to_string_lossy()));
-        build.define("WIN32", "");
-        build.flag("-Zi");
-        build.flag("-GR-");
-        build.flag("-std:c++17");
-        true
-    } else {
-        build.flag("-fPIC");
-        build.flag("-fno-rtti");
-        build.flag("-std=c++17");
-        build.flag("-include");
-        build.flag(&confdefs_path.to_string_lossy());
-        false
-    };
 
     build.compile("jsglue");
     println!("cargo:rerun-if-changed=src/jsglue.cpp");
@@ -74,23 +70,15 @@ fn main() {
         .formatter(bindgen::Formatter::Rustfmt)
         .clang_arg("-x")
         .clang_arg("c++")
-        .clang_args(cc_flags(true))
-        .clang_args(["-I", &include_path.to_string_lossy()])
+        .clang_args(cc_flags(&outdir, true, msvc))
         .enable_cxx_namespaces()
         .allowlist_file("./src/jsglue.cpp")
         .allowlist_recursively(false);
 
     if msvc {
-        builder = builder.clang_args([
-            "-fms-compatibility",
-            &format!("-FI{}", confdefs_path.to_string_lossy()),
-            "-DWIN32",
-            "-std=c++17",
-        ])
+        builder = builder.clang_arg("-fms-compatibility")
     } else {
-        builder = builder
-            .clang_args(["-fPIC", "-fno-rtti", "-std=c++17"])
-            .clang_args(["-include", &confdefs_path.to_str().expect("UTF-8")])
+        builder = builder.clang_args(["-fPIC", "-fno-rtti"])
     }
 
     for ty in BLACKLIST_TYPES {
