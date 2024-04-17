@@ -293,12 +293,6 @@ unsafe impl<T: TypedArrayElement> Traceable for TypedArray<T, Box<Heap<*mut JSOb
 }
 
 macro_rules! impl_traceable_tuple {
-    () => {
-        unsafe impl Traceable for () {
-            #[inline]
-            unsafe fn trace(&self, _: *mut JSTracer) {}
-        }
-    };
     ($($name:ident)+) => {
         unsafe impl<$($name: Traceable,)+> Traceable for ($($name,)+) {
             #[allow(non_snake_case)]
@@ -311,7 +305,6 @@ macro_rules! impl_traceable_tuple {
     };
 }
 
-impl_traceable_tuple! {}
 impl_traceable_tuple! { A }
 impl_traceable_tuple! { A B }
 impl_traceable_tuple! { A B C }
@@ -385,57 +378,6 @@ impl_traceable_fnptr! { A B C D E F G H I }
 impl_traceable_fnptr! { A B C D E F G H I J }
 impl_traceable_fnptr! { A B C D E F G H I J K }
 impl_traceable_fnptr! { A B C D E F G H I J K L }
-
-/// For use on non-jsmanaged types
-macro_rules! impl_traceable_simple {
-    ($($ty:ty $(,)?)+) => {
-        $(
-            unsafe impl Traceable for $ty {
-                #[inline]
-                unsafe fn trace(&self, _: *mut JSTracer) {}
-            }
-        )+
-    }
-}
-
-impl_traceable_simple!(bool);
-impl_traceable_simple!(i8, i16, i32, i64, isize);
-impl_traceable_simple!(u8, u16, u32, u64, usize);
-impl_traceable_simple!(f32, f64);
-impl_traceable_simple!(char, String);
-impl_traceable_simple!(
-    NonZeroI128,
-    NonZeroI16,
-    NonZeroI32,
-    NonZeroI64,
-    NonZeroI8,
-    NonZeroIsize
-);
-impl_traceable_simple!(
-    NonZeroU128,
-    NonZeroU16,
-    NonZeroU32,
-    NonZeroU64,
-    NonZeroU8,
-    NonZeroUsize
-);
-impl_traceable_simple!(AtomicBool);
-impl_traceable_simple!(AtomicI8, AtomicI16, AtomicI32, AtomicI64, AtomicIsize);
-impl_traceable_simple!(AtomicU8, AtomicU16, AtomicU32, AtomicU64, AtomicUsize);
-impl_traceable_simple!(Cow<'static, str>);
-impl_traceable_simple!(TypeId);
-impl_traceable_simple!(Duration, Instant, SystemTime);
-impl_traceable_simple!(PathBuf);
-impl_traceable_simple!(Range<u64>);
-impl_traceable_simple!(JoinHandle<()>);
-impl_traceable_simple!(*mut JobQueue);
-impl_traceable_simple!(Runtime);
-impl_traceable_simple!(Stencil);
-
-unsafe impl<'a> Traceable for &'a str {
-    #[inline]
-    unsafe fn trace(&self, _: *mut JSTracer) {}
-}
 
 /// Holds a set of JSTraceables that need to be rooted
 pub struct RootedTraceableSet {
