@@ -36,6 +36,12 @@ use std::time::{Duration, Instant, SystemTime};
 use crate::rust::{Runtime, Stencil};
 use crate::typedarray::{TypedArray, TypedArrayElement};
 
+/// Types that are managed by SM
+pub unsafe trait JSManaged: Traceable {
+    /// Trace `self`.
+    unsafe fn trace(&self, trc: *mut JSTracer);
+}
+
 /// Types that can be traced.
 ///
 /// This trait is unsafe; if it is implemented incorrectly, the GC may end up collecting objects
@@ -45,7 +51,14 @@ pub unsafe trait Traceable {
     unsafe fn trace(&self, trc: *mut JSTracer);
 }
 
-unsafe impl Traceable for Heap<*mut JSFunction> {
+unsafe impl<T: JSManaged> Traceable for T {
+    #[inline]
+    unsafe fn trace(&self, trc: *mut JSTracer) {
+        self.trace(trc)
+    }
+}
+
+unsafe impl JSManaged for Heap<*mut JSFunction> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         if self.get().is_null() {
@@ -55,7 +68,7 @@ unsafe impl Traceable for Heap<*mut JSFunction> {
     }
 }
 
-unsafe impl Traceable for Heap<*mut JSObject> {
+unsafe impl JSManaged for Heap<*mut JSObject> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         if self.get().is_null() {
@@ -65,7 +78,7 @@ unsafe impl Traceable for Heap<*mut JSObject> {
     }
 }
 
-unsafe impl Traceable for Heap<*mut Symbol> {
+unsafe impl JSManaged for Heap<*mut Symbol> {
     unsafe fn trace(&self, trc: *mut JSTracer) {
         if self.get().is_null() {
             return;
@@ -74,7 +87,7 @@ unsafe impl Traceable for Heap<*mut Symbol> {
     }
 }
 
-unsafe impl Traceable for Heap<*mut BigInt> {
+unsafe impl JSManaged for Heap<*mut BigInt> {
     unsafe fn trace(&self, trc: *mut JSTracer) {
         if self.get().is_null() {
             return;
@@ -83,7 +96,7 @@ unsafe impl Traceable for Heap<*mut BigInt> {
     }
 }
 
-unsafe impl Traceable for Heap<*mut JSScript> {
+unsafe impl JSManaged for Heap<*mut JSScript> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         if self.get().is_null() {
@@ -93,7 +106,7 @@ unsafe impl Traceable for Heap<*mut JSScript> {
     }
 }
 
-unsafe impl Traceable for Heap<*mut JSString> {
+unsafe impl JSManaged for Heap<*mut JSString> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         if self.get().is_null() {
@@ -103,21 +116,21 @@ unsafe impl Traceable for Heap<*mut JSString> {
     }
 }
 
-unsafe impl Traceable for Heap<Value> {
+unsafe impl JSManaged for Heap<Value> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         CallValueTracer(trc, self as *const _ as *mut Self, c_str!("value"));
     }
 }
 
-unsafe impl Traceable for Heap<jsid> {
+unsafe impl JSManaged for Heap<jsid> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         CallIdTracer(trc, self as *const _ as *mut Self, c_str!("id"));
     }
 }
 
-unsafe impl Traceable for Heap<PropertyDescriptor> {
+unsafe impl JSManaged for Heap<PropertyDescriptor> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         let desc = &*self.get_unsafe();
@@ -143,56 +156,56 @@ unsafe impl Traceable for Heap<PropertyDescriptor> {
     }
 }
 
-unsafe impl<T: Traceable> Traceable for Rc<T> {
+unsafe impl<T: JSManaged> JSManaged for Rc<T> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         (**self).trace(trc);
     }
 }
 
-unsafe impl<T: Traceable> Traceable for Arc<T> {
+unsafe impl<T: JSManaged> JSManaged for Arc<T> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         (**self).trace(trc);
     }
 }
 
-unsafe impl<T: Traceable + ?Sized> Traceable for Box<T> {
+unsafe impl<T: JSManaged + ?Sized> JSManaged for Box<T> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         (**self).trace(trc);
     }
 }
 
-unsafe impl<T: Traceable + Copy> Traceable for Cell<T> {
+unsafe impl<T: JSManaged + Copy> JSManaged for Cell<T> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         self.get().trace(trc);
     }
 }
 
-unsafe impl<T: Traceable> Traceable for UnsafeCell<T> {
+unsafe impl<T: JSManaged> JSManaged for UnsafeCell<T> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         (*self.get()).trace(trc);
     }
 }
 
-unsafe impl<T: Traceable> Traceable for RefCell<T> {
+unsafe impl<T: JSManaged> JSManaged for RefCell<T> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         (*self).borrow().trace(trc);
     }
 }
 
-unsafe impl<T: Traceable> Traceable for Option<T> {
+unsafe impl<T: JSManaged> JSManaged for Option<T> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         self.as_ref().map(|t| t.trace(trc));
     }
 }
 
-unsafe impl<T: Traceable, E: Traceable> Traceable for Result<T, E> {
+unsafe impl<T: JSManaged, E: JSManaged> JSManaged for Result<T, E> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         match self {
@@ -202,7 +215,7 @@ unsafe impl<T: Traceable, E: Traceable> Traceable for Result<T, E> {
     }
 }
 
-unsafe impl<T: Traceable> Traceable for [T] {
+unsafe impl<T: JSManaged> JSManaged for [T] {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         for t in self.iter() {
@@ -212,7 +225,7 @@ unsafe impl<T: Traceable> Traceable for [T] {
 }
 
 // jsmanaged array
-unsafe impl<T: Traceable, const COUNT: usize> Traceable for [T; COUNT] {
+unsafe impl<T: JSManaged, const COUNT: usize> JSManaged for [T; COUNT] {
     #[inline]
     unsafe fn trace(&self, tracer: *mut JSTracer) {
         for v in self.iter() {
@@ -221,7 +234,7 @@ unsafe impl<T: Traceable, const COUNT: usize> Traceable for [T; COUNT] {
     }
 }
 
-unsafe impl<const N: usize> Traceable for ValueArray<N> {
+unsafe impl<const N: usize> JSManaged for ValueArray<N> {
     #[inline]
     unsafe fn trace(&self, tracer: *mut JSTracer) {
         TraceValueArray(tracer, N, self.get_mut_ptr());
@@ -229,8 +242,8 @@ unsafe impl<const N: usize> Traceable for ValueArray<N> {
 }
 
 // TODO: Check if the following two are optimized to no-ops
-// if e.trace() is a no-op (e.g it is an impl_traceable_simple type)
-unsafe impl<T: Traceable> Traceable for Vec<T> {
+// if e.trace() is a no-op (e.g it is an impl_JSManaged_simple type)
+unsafe impl<T: JSManaged> JSManaged for Vec<T> {
     #[inline]
     unsafe fn trace(&self, trc: *mut JSTracer) {
         for t in &*self {
