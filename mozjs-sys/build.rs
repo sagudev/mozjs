@@ -1059,7 +1059,7 @@ fn archive() -> String {
 fn download_archive(base: Option<&str>) -> Result<PathBuf, std::io::Error> {
     let base = base.unwrap_or("https://github.com/servo/mozjs/releases");
     let version = env::var("CARGO_PKG_VERSION").unwrap();
-    let archive_path = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("libmozjs.tar.gz");
+    let archive_path = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join(&archive());
     if !archive_path.exists() {
         eprintln!("Trying to download prebuilt mozjs static library from Github Releases");
         let curl_start = Instant::now();
@@ -1070,7 +1070,8 @@ fn download_archive(base: Option<&str>) -> Result<PathBuf, std::io::Error> {
             .arg("-o")
             .arg(&archive_path)
             .arg(format!(
-                "{base}/download/mozjs-sys-v{version}/{}", archive()
+                "{base}/download/mozjs-sys-v{version}/{}",
+                archive()
             ))
             .status()?
             .success()
