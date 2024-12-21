@@ -858,6 +858,7 @@ fn get_cargo_target_dir(build_dir: &Path) -> Option<&Path> {
 
 /// Compress spidermonkey build into a tarball with necessary static binaries and bindgen wrappers.
 fn compress_static_lib(build_dir: &Path) -> Result<(), std::io::Error> {
+    let target = env::var("TARGET").unwrap();
     let target_dir = get_cargo_target_dir(build_dir).unwrap().display();
     let tar_gz = File::create(format!("{}/{}", target_dir, archive()))?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
