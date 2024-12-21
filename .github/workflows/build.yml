@@ -138,7 +138,7 @@ jobs:
           subject-path: ./target/${{ matrix.target }}/libmozjs-${{ matrix.target }}${{ matrix.features && '-debugmozjs' || '' }}.tar.gz
 
       - name: Upload artifact
-        if: ${{ !contains(matrix.target, 'aarch64') && matrix.features != 'debugmozjs' }}
+        if: ${{ !contains(matrix.target, 'aarch64') }}
         uses: actions/upload-artifact@v4
         with:
           path: ./target/${{ matrix.target }}/libmozjs-${{ matrix.target }}${{ matrix.features && '-debugmozjs' || '' }}.tar.gz
