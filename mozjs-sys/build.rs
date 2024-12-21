@@ -131,9 +131,6 @@ fn should_build_from_source() -> bool {
         true
     } else if env::var_os("MOZJS_ARCHIVE").is_some() {
         false
-    } else if env::var_os("CARGO_FEATURE_DEBUGMOZJS").is_some() {
-        println!("debug-mozjs feature is enabled. Building from source directly.");
-        true
     } else {
         false
     }
@@ -1053,6 +1050,11 @@ fn download_archive(base: Option<&str>) -> Result<PathBuf, std::io::Error> {
     let version = env::var("CARGO_PKG_VERSION").unwrap();
     let target = env::var("TARGET").unwrap();
     let archive_path = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("libmozjs.tar.gz");
+    let features = if env::var_os("CARGO_FEATURE_DEBUGMOZJS").is_some() {
+        "-debugmozjs"
+    } else {
+        ""
+    };
     if !archive_path.exists() {
         eprintln!("Trying to download prebuilt mozjs static library from Github Releases");
         let curl_start = Instant::now();
@@ -1063,7 +1065,7 @@ fn download_archive(base: Option<&str>) -> Result<PathBuf, std::io::Error> {
             .arg("-o")
             .arg(&archive_path)
             .arg(format!(
-                "{base}/download/mozjs-sys-v{version}/libmozjs-{target}.tar.gz"
+                "{base}/download/mozjs-sys-v{version}/libmozjs-{target}{features}.tar.gz"
             ))
             .status()?
             .success()
