@@ -858,9 +858,8 @@ fn get_cargo_target_dir(build_dir: &Path) -> Option<&Path> {
 
 /// Compress spidermonkey build into a tarball with necessary static binaries and bindgen wrappers.
 fn compress_static_lib(build_dir: &Path) -> Result<(), std::io::Error> {
-    let target = env::var("TARGET").unwrap();
     let target_dir = get_cargo_target_dir(build_dir).unwrap().display();
-    let tar_gz = File::create(format!("{}/libmozjs-{}.tar.gz", target_dir, target))?;
+    let tar_gz = File::create(format!("{}/{}", target_dir, archive()))?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
@@ -1043,18 +1042,23 @@ fn attest_artifact(kind: AttestationType, archive_path: &Path) -> Result<(), std
     Ok(())
 }
 
-/// Download the SpiderMonkey archive with cURL using the provided base URL. If it's None,
-/// it will use `servo/mozjs`'s release page as the base URL.
-fn download_archive(base: Option<&str>) -> Result<PathBuf, std::io::Error> {
-    let base = base.unwrap_or("https://github.com/servo/mozjs/releases");
-    let version = env::var("CARGO_PKG_VERSION").unwrap();
+/// Returns name of libmozjs archive
+fn archive() -> String {
     let target = env::var("TARGET").unwrap();
-    let archive_path = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("libmozjs.tar.gz");
     let features = if env::var_os("CARGO_FEATURE_DEBUGMOZJS").is_some() {
         "-debugmozjs"
     } else {
         ""
     };
+    format!("libmozjs-{target}{features}.tar.gz")
+}
+
+/// Download the SpiderMonkey archive with cURL using the provided base URL. If it's None,
+/// it will use `servo/mozjs`'s release page as the base URL.
+fn download_archive(base: Option<&str>) -> Result<PathBuf, std::io::Error> {
+    let base = base.unwrap_or("https://github.com/servo/mozjs/releases");
+    let version = env::var("CARGO_PKG_VERSION").unwrap();
+    let archive_path = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("libmozjs.tar.gz");
     if !archive_path.exists() {
         eprintln!("Trying to download prebuilt mozjs static library from Github Releases");
         let curl_start = Instant::now();
@@ -1065,7 +1069,7 @@ fn download_archive(base: Option<&str>) -> Result<PathBuf, std::io::Error> {
             .arg("-o")
             .arg(&archive_path)
             .arg(format!(
-                "{base}/download/mozjs-sys-v{version}/libmozjs-{target}{features}.tar.gz"
+                "{base}/download/mozjs-sys-v{version}/{}", archive()
             ))
             .status()?
             .success()
