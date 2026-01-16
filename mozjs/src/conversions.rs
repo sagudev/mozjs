@@ -182,9 +182,7 @@ pub trait FromJSValConvertible: Sized {
         cx: &mut crate::context::JSContext,
         val: HandleValue,
         option: Self::Config,
-    ) -> Result<ConversionResult<Self>, ()> {
-        unsafe { Self::from_jsval(cx.raw_cx(), val, option) }
-    }
+    ) -> Result<ConversionResult<Self>, ()>;
 }
 
 /// A trait to convert `JSVal`s to Rust types inside of Rc wrappers.
@@ -332,6 +330,14 @@ impl FromJSValConvertible for JSVal {
     ) -> Result<ConversionResult<JSVal>, ()> {
         Ok(ConversionResult::Success(value.get()))
     }
+
+    fn safe_from_jsval(
+        _cx: &mut crate::context::JSContext,
+        value: HandleValue,
+        _option: (),
+    ) -> Result<ConversionResult<JSVal>, ()> {
+        Ok(ConversionResult::Success(value.get()))
+    }
 }
 
 impl ToJSValConvertible for JSVal {
@@ -424,6 +430,14 @@ impl FromJSValConvertible for bool {
     ) -> Result<ConversionResult<bool>, ()> {
         Ok(ToBoolean(val)).map(ConversionResult::Success)
     }
+
+    fn safe_from_jsval(
+        _cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        _option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        Ok(unsafe { ToBoolean(val) }).map(ConversionResult::Success)
+    }
 }
 
 // https://heycam.github.io/webidl/#es-byte
@@ -448,6 +462,14 @@ impl FromJSValConvertible for i8 {
         option: ConversionBehavior,
     ) -> Result<ConversionResult<i8>, ()> {
         convert_int_from_jsval(cx, val, option, ToInt32)
+    }
+
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { convert_int_from_jsval(cx.raw_cx(), val, option, ToInt32) }
     }
 }
 
@@ -474,6 +496,15 @@ impl FromJSValConvertible for u8 {
     ) -> Result<ConversionResult<u8>, ()> {
         convert_int_from_jsval(cx, val, option, ToInt32)
     }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { convert_int_from_jsval(cx.raw_cx(), val, option, ToInt32) }
+    }
 }
 
 // https://heycam.github.io/webidl/#es-short
@@ -498,6 +529,15 @@ impl FromJSValConvertible for i16 {
         option: ConversionBehavior,
     ) -> Result<ConversionResult<i16>, ()> {
         convert_int_from_jsval(cx, val, option, ToInt32)
+    }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { convert_int_from_jsval(cx.raw_cx(), val, option, ToInt32) }
     }
 }
 
@@ -524,6 +564,15 @@ impl FromJSValConvertible for u16 {
     ) -> Result<ConversionResult<u16>, ()> {
         convert_int_from_jsval(cx, val, option, ToUint16)
     }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { convert_int_from_jsval(cx.raw_cx(), val, option, ToUint16) }
+    }
 }
 
 // https://heycam.github.io/webidl/#es-long
@@ -548,6 +597,14 @@ impl FromJSValConvertible for i32 {
         option: ConversionBehavior,
     ) -> Result<ConversionResult<i32>, ()> {
         convert_int_from_jsval(cx, val, option, ToInt32)
+    }
+
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { convert_int_from_jsval(cx.raw_cx(), val, option, ToInt32) }
     }
 }
 
@@ -574,6 +631,15 @@ impl FromJSValConvertible for u32 {
     ) -> Result<ConversionResult<u32>, ()> {
         convert_int_from_jsval(cx, val, option, ToUint32)
     }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { convert_int_from_jsval(cx.raw_cx(), val, option, ToUint32) }
+    }
 }
 
 // https://heycam.github.io/webidl/#es-long-long
@@ -599,6 +665,15 @@ impl FromJSValConvertible for i64 {
     ) -> Result<ConversionResult<i64>, ()> {
         convert_int_from_jsval(cx, val, option, ToInt64)
     }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { convert_int_from_jsval(cx.raw_cx(), val, option, ToInt64) }
+    }
 }
 
 // https://heycam.github.io/webidl/#es-unsigned-long-long
@@ -623,6 +698,15 @@ impl FromJSValConvertible for u64 {
         option: ConversionBehavior,
     ) -> Result<ConversionResult<u64>, ()> {
         convert_int_from_jsval(cx, val, option, ToUint64)
+    }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { convert_int_from_jsval(cx.raw_cx(), val, option, ToUint64) }
     }
 }
 
@@ -650,6 +734,15 @@ impl FromJSValConvertible for f32 {
         let result = ToNumber(cx, val);
         result.map(|f| f as f32).map(ConversionResult::Success)
     }
+
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        _option: (),
+    ) -> Result<ConversionResult<f32>, ()> {
+        let result = unsafe { ToNumber(cx.raw_cx(), val) };
+        result.map(|f| f as f32).map(ConversionResult::Success)
+    }
 }
 
 // https://heycam.github.io/webidl/#es-double
@@ -674,6 +767,15 @@ impl FromJSValConvertible for f64 {
         _option: (),
     ) -> Result<ConversionResult<f64>, ()> {
         ToNumber(cx, val).map(ConversionResult::Success)
+    }
+
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        _option: (),
+    ) -> Result<ConversionResult<f64>, ()> {
+        let result = unsafe { ToNumber(cx.raw_cx(), val) };
+        result.map(ConversionResult::Success)
     }
 }
 
@@ -776,6 +878,19 @@ impl FromJSValConvertible for String {
         };
         Ok(jsstr_to_string(cx, jsstr)).map(ConversionResult::Success)
     }
+
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        value: HandleValue,
+        _: (),
+    ) -> Result<ConversionResult<String>, ()> {
+        let jsstr = unsafe { ToString(cx.raw_cx(), value) };
+        let Some(jsstr) = NonNull::new(jsstr) else {
+            debug!("ToString failed");
+            return Err(());
+        };
+        Ok(unsafe { jsstr_to_string(cx.raw_cx(), jsstr) }).map(ConversionResult::Success)
+    }
 }
 
 impl<T: ToJSValConvertible> ToJSValConvertible for Option<T> {
@@ -810,6 +925,24 @@ impl<T: FromJSValConvertible> FromJSValConvertible for Option<T> {
                 ConversionResult::Success(v) => ConversionResult::Success(Some(v)),
                 ConversionResult::Failure(v) => ConversionResult::Failure(v),
             })
+        }
+    }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        value: HandleValue,
+        option: T::Config,
+    ) -> Result<ConversionResult<Option<T>>, ()> {
+        if value.get().is_null_or_undefined() {
+            Ok(ConversionResult::Success(None))
+        } else {
+            Ok(
+                match FromJSValConvertible::safe_from_jsval(cx, value, option)? {
+                    ConversionResult::Success(v) => ConversionResult::Success(Some(v)),
+                    ConversionResult::Failure(v) => ConversionResult::Failure(v),
+                },
+            )
         }
     }
 }
@@ -998,6 +1131,15 @@ impl<C: Clone, T: FromJSValConvertible<Config = C>> FromJSValConvertible for Vec
 
         Ok(ret).map(ConversionResult::Success)
     }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { Self::from_jsval(cx.raw_cx(), val, option) }
+    }
 }
 
 // https://heycam.github.io/webidl/#es-object
@@ -1069,6 +1211,15 @@ impl FromJSValConvertible for *mut JSObject {
 
         Ok(ConversionResult::Success(value.to_object()))
     }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { Self::from_jsval(cx.raw_cx(), val, option) }
+    }
 }
 
 impl ToJSValConvertible for *mut JS::Symbol {
@@ -1098,6 +1249,15 @@ impl FromJSValConvertible for *mut JS::Symbol {
         }
 
         Ok(ConversionResult::Success(value.to_symbol()))
+    }
+
+    #[inline]
+    fn safe_from_jsval(
+        cx: &mut crate::context::JSContext,
+        val: HandleValue,
+        option: Self::Config,
+    ) -> Result<ConversionResult<Self>, ()> {
+        unsafe { Self::from_jsval(cx.raw_cx(), val, option) }
     }
 }
 
