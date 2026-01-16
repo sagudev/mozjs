@@ -180,18 +180,22 @@ pub fn ObjectOrNullValue(o: *mut JSObject) -> JSVal {
     }
 }
 
+pub fn SymbolValue(s: &Symbol) -> JSVal {
+    unsafe { RawSymbolValue(s) }
+}
+
 #[cfg(target_pointer_width = "64")]
 #[inline(always)]
-pub fn SymbolValue(s: &Symbol) -> JSVal {
-    let bits = s as *const Symbol as usize as u64;
+pub unsafe fn RawSymbolValue(s: *const Symbol) -> JSVal {
+    let bits = s as usize as u64;
     assert!((bits >> JSVAL_TAG_SHIFT) == 0);
     BuildJSVal(ValueTag::SYMBOL, bits)
 }
 
 #[cfg(target_pointer_width = "32")]
 #[inline(always)]
-pub fn SymbolValue(s: &Symbol) -> JSVal {
-    let bits = s as *const Symbol as usize as u64;
+pub unsafe fn RawSymbolValue(s: *const Symbol) -> JSVal {
+    let bits = s as usize as u64;
     BuildJSVal(ValueTag::SYMBOL, bits)
 }
 

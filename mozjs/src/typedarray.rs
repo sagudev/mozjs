@@ -115,6 +115,10 @@ impl<T: TypedArrayElement, S: JSObjectStorage> ToJSValConvertible for TypedArray
     unsafe fn to_jsval(&self, cx: *mut JSContext, rval: MutableHandleValue) {
         ToJSValConvertible::to_jsval(&self.object.as_raw(), cx, rval);
     }
+
+    fn safe_to_jsval(&self, cx: &mut crate::context::JSContext, rval: MutableHandleValue) {
+        ToJSValConvertible::safe_to_jsval(&self.object.as_raw(), cx, rval);
+    }
 }
 
 pub enum CreateWith<'a, T: 'a> {
