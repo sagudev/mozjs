@@ -1135,7 +1135,7 @@ mod archive {
             .arg("verify")
             .arg(&archive_path)
             .arg("-R")
-            .arg("servo/mozjs");
+            .arg("sagudev/mozjs");
 
         let attestation_duration = start.elapsed();
         eprintln!(
@@ -1162,7 +1162,7 @@ mod archive {
     /// Download the SpiderMonkey archive with cURL using the provided base URL. If it's None,
     /// it will use `servo/mozjs`'s release page as the base URL.
     pub(crate) fn download_archive(base: Option<&str>) -> Result<PathBuf, std::io::Error> {
-        let base = base.unwrap_or("https://github.com/servo/mozjs/releases");
+        let base = base.unwrap_or("https://github.com/sagudev/mozjs/releases");
         let version = env::var("CARGO_PKG_VERSION").unwrap();
         let archive_path = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join(&archive());
 
