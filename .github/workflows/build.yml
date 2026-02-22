@@ -321,7 +321,7 @@ jobs:
           exclude-regex: mozjs-sys\/mozjs
       - name: Get mozjs
         run: |
-          bash ./mozjs-sys/etc/get_mozjs.py
+          python3 ./mozjs-sys/etc/get_mozjs.py
       - name: Apply patch
         run: |
           python3 ./mozjs-sys/etc/update.py --no-commit mozjs.tar.xz
