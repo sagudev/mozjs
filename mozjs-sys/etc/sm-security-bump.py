@@ -6,15 +6,13 @@ import subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from get_latest_mozjs import get_latest_mozjs_tag_changeset
-from get_taskcluster_mozjs import download_from_taskcluster
+from get_taskcluster_mozjs import download_from_taskcluster, ESR, REPO
 from get_mozjs import download_gh_artifact
 from update import main
 
-REPO = "mozilla-esr140"
-
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-tag, changeset = get_latest_mozjs_tag_changeset()
+minor_patch, tag, changeset = get_latest_mozjs_tag_changeset()
 print(f"Latest tag: {tag}, changeset: {changeset}")
 
 download_from_taskcluster(changeset)
@@ -57,10 +55,7 @@ os.remove("mozjs.tar.xz")
 subprocess.check_call(["git", "add", "--all"])
 subprocess.check_call(["git", "commit", "-m", "Apply patches", "--signoff"])
 
-version = (
-    tag.removeprefix("FIREFOX_").removesuffix("esr_RELEASE").replace("_", ".")[:-2]
-)
-version = f"0.{version}-0"
+version = f"0.{ESR}.{int(minor_patch)}-0"
 print(f"Updating to version {version}")
 
 cargo_toml_file = os.path.join(script_dir, "..", "Cargo.toml")

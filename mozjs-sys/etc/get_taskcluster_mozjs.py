@@ -5,7 +5,8 @@ import os
 import requests
 from urllib.request import urlretrieve
 
-REPO = "mozilla-esr140"
+ESR = 140
+REPO = f"mozilla-esr{ESR}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) mozjs-sys/1.0"}
 
 
