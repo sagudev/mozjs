@@ -85,7 +85,7 @@ with open(mozjs_cargo_toml_file, "r") as f:
             mozjs_cargo_toml[i] = f'version = "{major}.{minor}.{int(patch) + 1}"\n'
         if mozjs_cargo_toml[i].startswith("mozjs_sys"):
             mozjs_cargo_toml[i] = (
-                f'mozjs_sys = {{ version = "{version}", path = "../mozjs-sys" }}\n'
+                f'mozjs_sys = {{ version = "={version}", path = "../mozjs-sys" }}\n'
             )
 with open(mozjs_cargo_toml_file, "w") as f:
     f.writelines(mozjs_cargo_toml)
