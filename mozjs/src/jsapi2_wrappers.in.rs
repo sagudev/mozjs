@@ -26,9 +26,9 @@ wrap!(jsapi: pub fn UnwrapOneCheckedDynamic(obj: HandleObject, cx: &mut JSContex
 wrap!(jsapi: pub fn ReportAccessDenied(cx: &mut JSContext));
 wrap!(jsapi: pub fn NukeCrossCompartmentWrapper(cx: &JSContext, wrapper: *mut JSObject));
 wrap!(jsapi: pub fn NukeCrossCompartmentWrapperIfExists(cx: &JSContext, source: *mut Compartment, target: *mut JSObject));
-wrap!(jsapi: pub fn RemapWrapper(cx: &mut JSContext, wobj: *mut JSObject, newTarget: *mut JSObject));
-wrap!(jsapi: pub fn RemapDeadWrapper(cx: &mut JSContext, wobj: HandleObject, newTarget: HandleObject));
-wrap!(jsapi: pub fn RemapAllWrappersForObject(cx: &mut JSContext, oldTarget: HandleObject, newTarget: HandleObject) -> bool);
+wrap!(jsapi: pub fn RemapWrapper(cx: &JSContext, wobj: *mut JSObject, newTarget: *mut JSObject));
+wrap!(jsapi: pub fn RemapDeadWrapper(cx: &JSContext, wobj: HandleObject, newTarget: HandleObject));
+wrap!(jsapi: pub fn RemapAllWrappersForObject(cx: &JSContext, oldTarget: HandleObject, newTarget: HandleObject) -> bool);
 wrap!(jsapi: pub fn RecomputeWrappers(cx: &mut JSContext, sourceFilter: *const CompartmentFilter, targetFilter: *const CompartmentFilter) -> bool);
 wrap!(jsapi: pub fn SetWindowProxyClass(cx: &JSContext, clasp: *const JSClass));
 wrap!(jsapi: pub fn SetWindowProxy(cx: &JSContext, global: Handle<*mut JSObject>, windowProxy: Handle<*mut JSObject>));
@@ -519,7 +519,7 @@ wrap!(jsapi: pub fn JS_EncodeStringToBuffer(cx: &JSContext, str_: *mut JSString,
 wrap!(jsapi: pub fn JS_SetDestroyZoneCallback(cx: &JSContext, callback: JSDestroyZoneCallback));
 wrap!(jsapi: pub fn JS_SetDestroyCompartmentCallback(cx: &JSContext, callback: JSDestroyCompartmentCallback));
 wrap!(jsapi: pub fn JS_SetSizeOfIncludingThisCompartmentCallback(cx: &JSContext, callback: JSSizeOfIncludingThisCompartmentCallback));
-wrap!(jsapi: pub fn JS_RefreshCrossCompartmentWrappers(cx: &mut JSContext, obj: Handle<*mut JSObject>) -> bool);
+wrap!(jsapi: pub fn JS_RefreshCrossCompartmentWrappers(cx: &JSContext, obj: Handle<*mut JSObject>) -> bool);
 wrap!(jsapi: pub fn JS_MarkCrossZoneId(cx: &JSContext, id: jsid));
 wrap!(jsapi: pub fn JS_MarkCrossZoneIdValue(cx: &JSContext, value: *const Value));
 wrap!(jsapi: pub fn JS_StringHasBeenPinned(cx: &JSContext, str_: *mut JSString) -> bool);
