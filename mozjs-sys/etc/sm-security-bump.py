@@ -29,6 +29,19 @@ download_from_taskcluster(changeset)
 subprocess.check_call(
     [
         "gh",
+        "attestation",
+        "verify",
+        "mozjs.tar.xz",
+        "allFunctions.txt.gz",
+        "gcFunctions.txt.gz",
+        "--repo",
+        "servo/mozjs",
+    ]
+)
+
+subprocess.check_call(
+    [
+        "gh",
         "release",
         "create",
         f"mozjs-source-{changeset}",
