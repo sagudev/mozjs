@@ -15,6 +15,15 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 minor_patch, tag, changeset = get_latest_mozjs_tag_changeset()
 print(f"Latest tag: {tag}, changeset: {changeset}")
 
+try:
+    subprocess.check_call(
+        ["gh", "release", "view", f"mozjs-source-{changeset}", "--repo", "servo/mozjs"],
+    )
+    print(f"Release mozjs-source-{changeset} already exists, skipping SM bumps")
+    sys.exit(0)
+except subprocess.CalledProcessError:
+    pass
+
 download_from_taskcluster(changeset)
 
 subprocess.check_call(

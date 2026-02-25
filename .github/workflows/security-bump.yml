@@ -1,0 +1,19 @@
+name: Security bump
+
+on:
+    workflow_dispatch:
+    schedule:
+        # Runs at 03:30, every Saturday
+        - cron: "30 3 * * 3"
+
+jobs:
+    bump:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: "3.13"
+            - run: python3 ./mozjs-sys/etc/sm-security-bump.py
+            - name: Create Pull Request
+              uses: peter-evans/create-pull-request@v8
