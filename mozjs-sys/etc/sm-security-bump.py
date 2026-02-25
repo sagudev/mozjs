@@ -26,18 +26,6 @@ except subprocess.CalledProcessError:
 
 download_from_taskcluster(changeset)
 
-for file in ["mozjs.tar.xz", "allFunctions.txt.gz", "gcFunctions.txt.gz"]:
-    subprocess.check_call(
-        [
-            "gh",
-            "attestation",
-            "verify",
-            file,
-            "--repo",
-            "servo/mozjs",
-        ]
-    )
-
 subprocess.check_call(
     [
         "gh",
