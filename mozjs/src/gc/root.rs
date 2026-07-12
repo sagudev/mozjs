@@ -7,6 +7,7 @@ use std::ptr::NonNull;
 use crate::context::NoGC;
 use crate::jsapi::{jsid, JSContext, JSFunction, JSObject, JSScript, JSString, Symbol, Value, JS};
 use mozjs_sys::jsgc::{RootKind, Rootable, Rooted};
+use mozjs_sys::trace::Traceable;
 
 use crate::jsapi::Handle as RawHandle;
 use crate::jsapi::HandleObject as RawHandleObject;
@@ -554,5 +555,29 @@ impl<'b, T: Rootable> RootKind2 for NotRooted<'b, T> {
                 anchor: PhantomData,
             }
         }
+    }
+}
+
+/// A type that is
+///
+/// This is very similar to `PersistantRooted` in SM, but it uses thread local for storage.
+pub struct Root<T: Traceable> {
+    value: T,
+}
+
+impl<T: Traceable> Root<T> {
+    pub fn new(value: T) -> Self {
+        super::ROOTED_TRACEABLES.with(|traceables| {
+            traceables.add(&value as *const _ as *const dyn Traceable);
+        });
+        Root { value }
+    }
+}
+
+impl<T: Traceable> Drop for Root<T> {
+    fn drop(&mut self) {
+        super::ROOTED_TRACEABLES.with(|traceables| {
+            traceables.remove(&self.value as *const _ as *const dyn Traceable);
+        });
     }
 }
