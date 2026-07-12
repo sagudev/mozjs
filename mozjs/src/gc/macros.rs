@@ -5,17 +5,17 @@ macro_rules! rooted {
     };
 	(in($cx:expr) let $($var:ident)+ = $init:expr) => {
         let mut __root = ::std::mem::MaybeUninit::uninit();
-        let $($var)+ = $crate::gc::RootedGuard::new($cx, &mut __root, $init);
+        let $($var)+ = $crate::gc::RootKind2::new_root($cx, &mut __root, $init);
     };
 	(in($cx:expr) let $($var:ident)+: $type:ty = $init:expr) => {
         let mut __root = ::std::mem::MaybeUninit::uninit();
-        let $($var)+: $crate::gc::RootedGuard<$type> = $crate::gc::RootedGuard::new($cx, &mut __root, $init);
+        let $($var)+: $crate::gc::RootedGuard<$type> = $crate::gc::RootKind2::new_root($cx, &mut __root, $init);
     };
 	(in($cx:expr) let $($var:ident)+: $type:ty) => {
         let mut __root = ::std::mem::MaybeUninit::uninit();
         // SAFETY:
         // We're immediately storing the initial value in a rooted location.
-        let $($var)+: $crate::gc::RootedGuard<$type> = $crate::gc::RootedGuard::new(
+        let $($var)+: $crate::gc::RootedGuard<$type> = $crate::gc::RootKind2::new_root(
             $cx,
             &mut __root,
             unsafe { <$type as $crate::gc::GCMethods>::initial() },

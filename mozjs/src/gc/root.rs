@@ -6,7 +6,7 @@ use std::ptr::NonNull;
 
 use crate::context::NoGC;
 use crate::jsapi::{jsid, JSContext, JSFunction, JSObject, JSScript, JSString, Symbol, Value, JS};
-use mozjs_sys::jsgc::{RootKind, Rooted};
+use mozjs_sys::jsgc::{RootKind, Rootable, Rooted};
 
 use crate::jsapi::Handle as RawHandle;
 use crate::jsapi::HandleObject as RawHandleObject;
@@ -15,6 +15,36 @@ use crate::jsapi::MutableHandle as RawMutableHandle;
 use mozjs_sys::jsgc::IntoHandle as IntoRawHandle;
 use mozjs_sys::jsgc::IntoMutableHandle as IntoRawMutableHandle;
 use mozjs_sys::jsgc::ValueArray;
+
+pub trait RootKind2 {
+    type InnerType: RootKind;
+
+    fn new_root<'a>(
+        cx: *mut JSContext,
+        root: &'a mut MaybeUninit<Rooted<Self::InnerType>>,
+        initial: Self,
+    ) -> RootedGuard<'a, Self::InnerType>;
+}
+
+impl<T: RootKind> RootKind2 for T {
+    type InnerType = T;
+
+    fn new_root<'a>(
+        cx: *mut JSContext,
+        root: &'a mut MaybeUninit<Rooted<Self::InnerType>>,
+        initial: Self,
+    ) -> RootedGuard<'a, Self::InnerType> {
+        let root: *mut Rooted<Self::InnerType> = root.write(Rooted::new_unrooted(initial));
+
+        unsafe {
+            Rooted::add_to_root_stack(root, cx);
+            RootedGuard {
+                root,
+                anchor: PhantomData,
+            }
+        }
+    }
+}
 
 /// Rust API for keeping a Rooted value in the context's root stack.
 /// Example usage: `rooted!(in(cx) let x = UndefinedValue());`.
@@ -483,5 +513,46 @@ impl HandleValue<'static> {
 impl<'a> HandleObject<'a> {
     pub fn null() -> Self {
         unsafe { Self::from_raw(RawHandleObject::null()) }
+    }
+}
+
+pub struct NotRooted<'a, T> {
+    pub(crate) inner: T,
+    pub(crate) no_gc: PhantomData<&'a NoGC>,
+}
+
+impl<'a, T> NotRooted<'a, T> {
+    pub fn new(inner: T, _no_gc: &'a NoGC) -> Self {
+        NotRooted {
+            inner,
+            no_gc: PhantomData,
+        }
+    }
+
+    pub fn rebound<'b>(self, _no_gc: &'b NoGC) -> NotRooted<'b, T> {
+        NotRooted {
+            inner: self.inner,
+            no_gc: PhantomData,
+        }
+    }
+}
+
+impl<'b, T: Rootable> RootKind2 for NotRooted<'b, T> {
+    type InnerType = T;
+
+    fn new_root<'a>(
+        cx: *mut JSContext,
+        root: &'a mut MaybeUninit<Rooted<T>>,
+        initial: Self,
+    ) -> RootedGuard<'a, T> {
+        let root: *mut Rooted<T> = root.write(Rooted::new_unrooted(initial.inner));
+
+        unsafe {
+            Rooted::add_to_root_stack(root, cx);
+            RootedGuard {
+                root,
+                anchor: PhantomData,
+            }
+        }
     }
 }
