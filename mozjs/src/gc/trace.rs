@@ -83,3 +83,19 @@ impl RootedTraceableSet {
         });
     }
 }
+
+/// `StableTraceObject` represents values that can be rooted through a stable address that will
+/// not change for their whole lifetime.
+/// It is an unsafe trait that requires implementors to ensure certain safety guarantees.
+///
+/// # Safety
+///
+/// Implementors of this trait must ensure that the `trace` method correctly accounts for all
+/// owned and referenced objects, so that the garbage collector can accurately determine which
+/// objects are still in use. Failing to adhere to this contract may result in undefined behavior,
+/// such as use-after-free errors.
+pub unsafe trait StableTraceObject {
+    /// Returns a stable trace object which address won't change for the whole
+    /// lifetime of the value.
+    fn stable_trace_object(&self) -> *const dyn Traceable;
+}

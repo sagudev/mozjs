@@ -1,4 +1,4 @@
-use crate::gc::RootedTraceableSet;
+use crate::gc::{RootedTraceableSet, StableTraceObject};
 use crate::jsapi::{Heap, JSTracer};
 use crate::rust::Handle;
 use mozjs_sys::jsapi::JS;
@@ -39,6 +39,13 @@ unsafe impl<T: Traceable> Traceable for RootableVec<T> {
 )]
 pub struct RootedVec<'a, T: Traceable + 'static> {
     root: &'a mut RootableVec<T>,
+}
+
+// SAFETY: By taking the lifetime 'a we ensure that the vector is not moved (address is stable / root remains valid) for lifetime of 'a.
+unsafe impl<'a, T: Traceable + 'static> StableTraceObject for RootedVec<'a, T> {
+    fn stable_trace_object(&self) -> *const dyn Traceable {
+        self.root as *const dyn Traceable
+    }
 }
 
 impl From<&RootedVec<'_, JSVal>> for JS::HandleValueArray {
@@ -111,6 +118,12 @@ impl<'a, T: Traceable> DerefMut for RootedVec<'a, T> {
 /// If you know what you're doing, use this.
 pub struct RootedTraceableBox<T: Traceable + 'static> {
     ptr: *mut T,
+}
+
+unsafe impl<T: Traceable + 'static> StableTraceObject for RootedTraceableBox<T> {
+    fn stable_trace_object(&self) -> *const dyn Traceable {
+        self.ptr as *const dyn Traceable
+    }
 }
 
 impl<T: Traceable + 'static> RootedTraceableBox<T> {
