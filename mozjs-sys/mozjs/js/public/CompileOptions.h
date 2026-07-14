@@ -122,7 +122,7 @@ class JS_PUBLIC_API ReadOnlyDecodeOptions;
 
 // Compilation-specific part of JS::ContextOptions which is supposed to be
 // configured by user prefs.
-class JS_PUBLIC_API PrefableCompileOptions {
+class JS_PUBLIC_API __attribute__((__packed__)) PrefableCompileOptions {
  public:
   PrefableCompileOptions()
       : sourcePragmas_(true),
