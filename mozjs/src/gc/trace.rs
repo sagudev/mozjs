@@ -3,6 +3,8 @@ use crate::rust::{Runtime, Stencil};
 use mozjs_sys::trace::Traceable;
 use std::cell::UnsafeCell;
 use std::ffi::c_void;
+use std::pin::Pin;
+use std::rc::Rc;
 
 use crate::typedarray::{TypedArray, TypedArrayElement};
 
@@ -84,6 +86,7 @@ impl RootedTraceableSet {
     }
 }
 
+// TODO: we need to limit construction (via JSManaged) procmacro
 /// `StableTraceObject` represents values that can be rooted through a stable address that will
 /// not change for their whole lifetime.
 /// It is an unsafe trait that requires implementors to ensure certain safety guarantees.
@@ -98,4 +101,16 @@ pub unsafe trait StableTraceObject {
     /// Returns a stable trace object which address won't change for the whole
     /// lifetime of the value.
     fn stable_trace_object(&self) -> *const dyn Traceable;
+}
+
+unsafe impl<T: Traceable + 'static> StableTraceObject for Pin<Box<T>> {
+    fn stable_trace_object(&self) -> *const dyn Traceable {
+        self.as_ref().get_ref() as *const dyn Traceable
+    }
+}
+
+unsafe impl<T: Traceable + 'static> StableTraceObject for Pin<Rc<T>> {
+    fn stable_trace_object(&self) -> *const dyn Traceable {
+        self.as_ref().get_ref() as *const dyn Traceable
+    }
 }
