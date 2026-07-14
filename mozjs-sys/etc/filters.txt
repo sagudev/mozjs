@@ -40,7 +40,7 @@
 + /intl/icu_capi/bindings/c/
 + /intl/icu_capi/bindings/c/*
 + /intl/icu_capi/bindings/cpp/
-+ /intl/icu_capi/bindings/cpp/*
++ /intl/icu_capi/bindings/cpp/**
 - /intl/icu_capi/**
 
 # Keep zlib headers for libz-rs-sys
