@@ -1,11 +1,18 @@
 [workspace]
-members = ["mozjs-sys", "mozjs"]
+members = [
+    "mozjs-extracted-crates/locale_glue",
+    "mozjs-extracted-crates/properties_glue",
+    "mozjs-extracted-crates/unicode-bidi-ffi",
+    "mozjs-sys",
+    "mozjs",
+]
 resolver = "2"
 
 [workspace.package]
 repository = "https://github.com/servo/mozjs/"
 license = "MPL-2.0"
 edition = "2021"
+rust-version = "1.87"
 
 [workspace.dependencies]
 cc = "1"

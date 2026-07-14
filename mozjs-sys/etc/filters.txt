@@ -21,6 +21,10 @@
 - /build/rust
 - /intl/bidi
 - /intl/icu_segmenter_data
+- js/src/builtin/normalizer_glue
+- js/src/irregexp/properties_glue
+- js/src/builtin/intl/collator_glue
+- js/src/builtin/intl/locale_glue
 - /js/rust
 - /js/src/build.rs
 - /js/src/Cargo.toml
