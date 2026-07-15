@@ -10,12 +10,12 @@
 #include "irregexp/imported/regexp.h"
 
 #ifdef V8_INTL_SUPPORT
-#include "js/properties_glue.h"
-#include "unicode/uniset.h"
-#include "unicode/unistr.h"
-#include "unicode/usetiter.h"
-#include "unicode/utf16.h"  // For U16_NEXT
-#endif                      // V8_INTL_SUPPORT
+#  include "properties_glue.h"
+#  include "unicode/uniset.h"
+#  include "unicode/unistr.h"
+#  include "unicode/usetiter.h"
+#  include "unicode/utf16.h"  // For U16_NEXT
+#endif                        // V8_INTL_SUPPORT
 
 namespace v8 {
 namespace internal {
