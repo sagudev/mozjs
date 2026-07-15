@@ -548,7 +548,7 @@ fn cc_flags(bindgen: bool) -> Vec<&'static str> {
         }
 
         flags.extend(&[
-            "-std:c++17",
+            "-std:c++20",
             "-Zi",
             "-GR-",
             "-DWIN32",
@@ -559,8 +559,8 @@ fn cc_flags(bindgen: bool) -> Vec<&'static str> {
         ]);
     } else {
         flags.extend(&[
-            "-std=gnu++17",
-            "-std=c++17",
+            "-std=gnu++20",
+            "-std=c++20",
             "-xc++",
             "-fPIC",
             "-fno-rtti",
