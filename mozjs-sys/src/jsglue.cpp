@@ -35,7 +35,7 @@
 #include "js/friend/ErrorMessages.h"
 #include "jsapi.h"
 #include "jsfriendapi.h"
-#include "mozilla/Unused.h"
+#include "mozilla/PodOperations.h"
 
 typedef bool (*WantToMeasure)(JSObject* obj);
 typedef size_t (*GetSize)(JSObject* obj);
@@ -43,14 +43,15 @@ typedef size_t (*GetSize)(JSObject* obj);
 WantToMeasure gWantToMeasure = nullptr;
 
 struct JobQueueTraps {
-  bool (*getHostDefinedData)(const void* queue, JSContext* cx,
-                             JS::MutableHandle<JSObject*> data);
-  bool (*enqueuePromiseJob)(const void* queue, JSContext* cx,
-                            JS::HandleObject promise, JS::HandleObject job,
-                            JS::HandleObject allocationSite,
-                            JS::HandleObject hostDefinedData) = 0;
+  bool (*getHostDefinedData)(
+      const void* queue, JSContext* cx,
+      JS::MutableHandle<JSObject*> incumbentGlobal,
+      JS::MutableHandle<JSObject*> optionalHostDefinedData);
+  bool (*getHostDefinedGlobal)(const void* queue, JSContext* cx,
+                               JS::MutableHandle<JSObject*> data);
   void (*runJobs)(const void* queue, JSContext* cx);
-  bool (*empty)(const void* queue);
+  void (*traceNonGCThingMicroTask)(const void* queue, JSTracer* trc,
+                                   JS::Value* valuePtr);
 
   // Create a new queue, push it onto an embedder-side stack, and return the new
   // queue.
@@ -76,22 +77,23 @@ class RustJobQueue : public JS::JobQueue {
   ~RustJobQueue() { mTraps.dropInterruptQueues(mInterruptQueues); }
 
   virtual bool getHostDefinedData(
+      JSContext* cx, JS::MutableHandle<JSObject*> incumbentGlobal,
+      JS::MutableHandle<JSObject*> optionalHostDefinedData) const override {
+    return mTraps.getHostDefinedData(mQueue, cx, incumbentGlobal,
+                                     optionalHostDefinedData);
+  }
+  virtual bool getHostDefinedGlobal(
       JSContext* cx, JS::MutableHandle<JSObject*> data) const override {
-    return mTraps.getHostDefinedData(mQueue, cx, data);
+    return mTraps.getHostDefinedGlobal(mQueue, cx, data);
   }
-  virtual bool enqueuePromiseJob(JSContext* cx, JS::HandleObject promise,
-                                 JS::HandleObject job,
-                                 JS::HandleObject allocationSite,
-                                 JS::HandleObject hostDefinedData) override {
-    return mTraps.enqueuePromiseJob(mQueue, cx, promise, job, allocationSite,
-                                    hostDefinedData);
-  }
-
-  virtual bool empty() const override { return mTraps.empty(mQueue); }
-
   virtual void runJobs(JSContext* cx) override { mTraps.runJobs(mQueue, cx); }
 
   bool isDrainingStopped() const override { return false; }
+
+  virtual void traceNonGCThingMicroTask(JSTracer* trc,
+                                        JS::Value* valuePtr) override {
+    mTraps.traceNonGCThingMicroTask(mQueue, trc, valuePtr);
+  }
 
  private:
   class SavedQueue : public JS::JobQueue::SavedJobQueue {
@@ -606,7 +608,8 @@ class ServoDOMVisitor : public JS::ObjectPrivateVisitor {
 
 struct JSPrincipalsCallbacks {
   bool (*write)(JSPrincipals*, JSContext* cx, JSStructuredCloneWriter* writer);
-  bool (*isSystemOrAddonPrincipal)(JSPrincipals*);
+  bool (*isSystemPrincipal)(JSPrincipals*);
+  bool (*isAddonPrincipal)(JSPrincipals*);
 };
 
 class RustJSPrincipals final : public JSPrincipals {
@@ -624,8 +627,12 @@ class RustJSPrincipals final : public JSPrincipals {
                                  : false;
   }
 
-  bool isSystemOrAddonPrincipal() override {
-    return this->callbacks.isSystemOrAddonPrincipal(this);
+  bool isSystemPrincipal() override {
+    return this->callbacks.isSystemPrincipal(this);
+  }
+
+  bool isAddonPrincipal() override {
+    return this->callbacks.isAddonPrincipal(this);
   }
 };
 
@@ -960,14 +967,6 @@ static size_t MallocSizeOf(const void* aPtr) {
 #endif
 }
 
-bool CollectServoSizes(JSContext* cx, JS::ServoSizes* sizes, GetSize gs) {
-  mozilla::PodZero(sizes);
-
-  ServoDOMVisitor sdv(gs, ShouldMeasureObject);
-
-  return JS::AddServoSizeOf(cx, MallocSizeOf, &sdv, sizes);
-}
-
 void InitializeMemoryReporter(WantToMeasure wtm) { gWantToMeasure = wtm; }
 
 // Expose templated functions for tracing
@@ -1106,10 +1105,6 @@ void JS_GetScriptPrivate(JSScript* script, JS::MutableHandleValue dest) {
   dest.set(JS::GetScriptPrivate(script));
 }
 
-void JS_MaybeGetScriptPrivate(JSObject* obj, JS::MutableHandleValue dest) {
-  dest.set(js::MaybeGetScriptPrivate(obj));
-}
-
 void JS_GetModulePrivate(JSObject* module, JS::MutableHandleValue dest) {
   dest.set(JS::GetModulePrivate(module));
 }
@@ -1188,13 +1183,16 @@ bool DispatchToEventLoop(void* closure,
 
 void SetUpEventLoopDispatch(JSContext* cx,
                             RustDispatchToEventLoopCallback callback,
+                            JS::AsyncTaskStartedCallback startedCallback,
+                            JS::AsyncTaskFinishedCallback finishedCallback,
                             void* closure) {
   // Intentionally leaked; this data needs to live as long as the JS runtime.
   EventLoopCallbackData* data = new EventLoopCallbackData{
       callback,
       closure,
   };
-  JS::InitDispatchsToEventLoop(cx, DispatchToEventLoop, nullptr, data);
+  JS::InitAsyncTaskCallbacks(cx, DispatchToEventLoop, nullptr, startedCallback,
+                             finishedCallback, data);
 }
 
 void DispatchableRun(JSContext* cx, DispatchablePointer* ptr,
