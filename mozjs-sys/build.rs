@@ -949,6 +949,7 @@ impl BuildTarget {
                 "JS::PersistentRooted.*",
                 "JS::detail::CallArgsBase.*",
                 "js::detail::UniqueSelector.*",
+                "std::unique_ptr",
                 "mozilla::BufferList",
                 "mozilla::Maybe.*",
                 "mozilla::UniquePtr.*",
