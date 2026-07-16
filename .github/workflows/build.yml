@@ -199,6 +199,11 @@ jobs:
           ]
     steps:
       - uses: actions/checkout@v6
+      # host compiler needs to be new enough
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "19"
       - name: Install NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
@@ -232,6 +237,11 @@ jobs:
         features: ["", "--features debugmozjs"]
     steps:
       - uses: actions/checkout@v6
+      # host compiler needs to be new enough
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "19"
       - name: Setup OpenHarmony SDK
         id: setup_sdk
         uses: openharmony-rs/setup-ohos-sdk@v0.2
@@ -269,6 +279,11 @@ jobs:
           - wasip2
     steps:
       - uses: actions/checkout@v6
+      # host compiler needs to be new enough
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "19"
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         id: toolchain
