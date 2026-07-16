@@ -66,8 +66,8 @@ jobs:
         env:
           DEBUGMOZJS_OPT: ${{ matrix.features == 'debugmozjs' && '--config profile.dev.package.mozjs_sys.opt-level=3' || '' }}
         run: |
-          cargo +${{ steps.toolchain.outputs.name }} build --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
-          cargo +${{ steps.toolchain.outputs.name }} test --tests --examples --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
+          cargo +${{ steps.toolchain.outputs.name }} build -p mozjs -p mozjs_sys --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
+          cargo +${{ steps.toolchain.outputs.name }} test -p mozjs -p mozjs_sys --tests --examples --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
       - name: Upload artifact
         if: ${{ env.NEW_RUST_CHECK == 'false' }}
         uses: actions/upload-artifact@v7
@@ -114,9 +114,9 @@ jobs:
         env:
           DEBUGMOZJS_OPT: ${{ matrix.features == 'debugmozjs' && '--config profile.dev.package.mozjs_sys.opt-level=3' || '' }}
         run: |
-          cargo +${{ steps.toolchain.outputs.name }} build --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
-          cargo +${{ steps.toolchain.outputs.name }} test --tests --examples --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
-          cargo +${{ steps.toolchain.outputs.name }} test --doc -p mozjs --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
+          cargo +${{ steps.toolchain.outputs.name }} build -p mozjs -p mozjs_sys --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
+          cargo +${{ steps.toolchain.outputs.name }} test -p mozjs -p mozjs_sys --tests --examples --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
+          cargo +${{ steps.toolchain.outputs.name }} test -p mozjs --doc --verbose --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
       - name: Check wrappers integrity
         # we generate wrappers only without debugmozjs
         if: ${{ matrix.features != 'debugmozjs' }}
@@ -171,13 +171,13 @@ jobs:
         env:
           DEBUGMOZJS_OPT: ${{ matrix.features == 'debugmozjs' && '--config profile.dev.package.mozjs_sys.opt-level=3' || '' }}
         run: |
-          cargo +${{ steps.toolchain.outputs.name }} build --verbose --target ${{ matrix.platform.target }} --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
+          cargo +${{ steps.toolchain.outputs.name }} build -p mozjs -p mozjs_sys --verbose --target ${{ matrix.platform.target }} --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
       - name: Test Windows
         shell: cmd
         env:
           DEBUGMOZJS_OPT: ${{ matrix.features == 'debugmozjs' && '--config profile.dev.package.mozjs_sys.opt-level=3' || '' }}
         run: |
-          cargo +${{ steps.toolchain.outputs.name }} test --tests --examples --verbose --target ${{ matrix.platform.target }} --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
+          cargo +${{ steps.toolchain.outputs.name }} test -p mozjs -p mozjs_sys --tests --examples --verbose --target ${{ matrix.platform.target }} --features "${{ matrix.features }}" ${{ env.DEBUGMOZJS_OPT }}
 
       - name: Upload artifact
         if: ${{ env.NEW_RUST_CHECK == 'false' }}
@@ -215,7 +215,7 @@ jobs:
         env:
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          ./android-build cargo +${{ steps.toolchain.outputs.name }} build --target="${{ matrix.target }}"
+          ./android-build cargo +${{ steps.toolchain.outputs.name }} build -p mozjs -p mozjs_sys --target="${{ matrix.target }}"
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         if: ${{ env.NEW_RUST_CHECK == 'false' }}
@@ -248,7 +248,7 @@ jobs:
         env:
           OHOS_SDK_NATIVE: ${{ steps.setup_sdk.outputs.ohos_sdk_native }}
         run: |
-          ./ohos-build cargo +${{ steps.toolchain.outputs.name }} build --target="${{ matrix.target }}" ${{ matrix.features }}
+          ./ohos-build cargo +${{ steps.toolchain.outputs.name }} build -p mozjs -p mozjs_sys --target="${{ matrix.target }}" ${{ matrix.features }}
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         if: ${{ env.NEW_RUST_CHECK == 'false' && matrix.features == '' }}
@@ -256,7 +256,7 @@ jobs:
           path: ./target/libmozjs-${{ matrix.target }}.tar.gz
           name: libmozjs-${{ matrix.target }}.tar.gz
       - name: Test linking (build unit-tests)
-        run: ./ohos-build cargo +${{ steps.toolchain.outputs.name }} build --target="${{ matrix.target }}" ${{ matrix.features }} --tests
+        run: ./ohos-build cargo +${{ steps.toolchain.outputs.name }} build -p mozjs -p mozjs_sys --target="${{ matrix.target }}" ${{ matrix.features }} --tests
 
   wasi:
     name: wasm32-${{ matrix.target }}
@@ -285,14 +285,14 @@ jobs:
           mv wasi-sdk-33.0-x86_64-linux wasi-sdk
       - name: Build
         run: |
-          cargo +${{ steps.toolchain.outputs.name }} build --target=wasm32-${{ matrix.target }}
+          cargo +${{ steps.toolchain.outputs.name }} build -p mozjs -p mozjs_sys --target=wasm32-${{ matrix.target }}
         env:
           WASI_SDK_PATH: "/tmp/wasi-sdk"
       - name: Test
         run: |
           export CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir=$PWD::/cwd"
           export CARGO_TARGET_WASM32_WASIP2_RUNNER="wasmtime run --dir=$PWD::/cwd"
-          cargo +${{ steps.toolchain.outputs.name }} test --tests --examples --target=wasm32-${{ matrix.target }}
+          cargo +${{ steps.toolchain.outputs.name }} test -p mozjs -p mozjs_sys --tests --examples --target=wasm32-${{ matrix.target }}
         env:
           WASI_SDK_PATH: "/tmp/wasi-sdk"
       - name: Upload artifact
@@ -320,7 +320,7 @@ jobs:
           toolchain: ${{ inputs.rust_version }}
           targets: ${{ matrix.target }}
           components: "rustfmt"
-      - run: cargo +${{ steps.toolchain.outputs.name }} test --tests --examples --target ${{ matrix.target }}
+      - run: cargo +${{ steps.toolchain.outputs.name }} test -p mozjs -p mozjs_sys --tests --examples --target ${{ matrix.target }}
 
   integrity:
     runs-on: ubuntu-latest
