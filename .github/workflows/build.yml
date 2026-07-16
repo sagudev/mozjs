@@ -6,7 +6,7 @@ on:
       rust_version:
         required: false
         # Keep the default in sync with `rust-toolchain.toml` and servo's MSRV!
-        default: "1.85.0"
+        default: "1.88.0"
         type: string
       verify_artifacts:
         required: false
@@ -268,7 +268,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         id: toolchain
         with:
-          toolchain: "1.85.0"
+          toolchain: "1.88.0"
           targets: "wasm32-${{ matrix.target }}"
           components: "rustfmt"
       - uses: bytecodealliance/actions/wasmtime/setup@v1
