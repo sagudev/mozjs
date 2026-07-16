@@ -278,9 +278,9 @@ jobs:
       - name: Install WASI-SDK
         run: |
           cd /tmp
-          curl --retry 5 --retry-all-errors -OL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.tar.gz
-          tar -xzf wasi-sdk-25.0-x86_64-linux.tar.gz
-          mv wasi-sdk-25.0-x86_64-linux wasi-sdk
+          curl --retry 5 --retry-all-errors -OL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sdk-33.0-x86_64-linux.tar.gz
+          tar -xzf wasi-sdk-33.0-x86_64-linux.tar.gz
+          mv wasi-sdk-33.0-x86_64-linux wasi-sdk
       - name: Build
         run: |
           cargo +${{ steps.toolchain.outputs.name }} build --target=wasm32-${{ matrix.target }}
