@@ -17,7 +17,6 @@ wrap!(glue: pub fn RUST_INTERNED_STRING_TO_JSID(cx: *mut JSContext, str_: *mut J
 wrap!(glue: pub fn AppendToIdVector(v: MutableHandleIdVector, id: HandleId) -> bool);
 wrap!(glue: pub fn JS_GetPromiseResult(promise: HandleObject, dest: MutableHandleValue));
 wrap!(glue: pub fn JS_GetScriptPrivate(script: *mut JSScript, dest: MutableHandleValue));
-wrap!(glue: pub fn JS_MaybeGetScriptPrivate(obj: *mut JSObject, dest: MutableHandleValue));
 wrap!(glue: pub fn JS_GetModulePrivate(module: *mut JSObject, dest: MutableHandleValue));
 wrap!(glue: pub fn JS_GetScriptedCallerPrivate(cx: *mut JSContext, dest: MutableHandleValue));
 wrap!(glue: pub fn JS_GetRegExpFlags(cx: *mut JSContext, obj: HandleObject, flags: *mut RegExpFlags));
