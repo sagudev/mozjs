@@ -53,10 +53,6 @@
 + modules/zlib/src/zconf.h
 - modules/zlib/**
 
-# Remove unused python dependency that also causes problems with case-sensitive filesystems.
-- /third_party/python/Jinja2
-- /third_party/python/jinja2
-
 # Remove unused python dependencies to reduce the size
 - third_party/python/aiohttp
 
