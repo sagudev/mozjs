@@ -967,6 +967,14 @@ static size_t MallocSizeOf(const void* aPtr) {
 #endif
 }
 
+bool CollectServoSizes(JSContext* cx, JS::ServoSizes* sizes, GetSize gs) {
+  mozilla::PodZero(sizes);
+
+  ServoDOMVisitor sdv(gs, ShouldMeasureObject);
+
+  return JS::AddServoSizeOf(cx, MallocSizeOf, &sdv, sizes);
+}
+
 void InitializeMemoryReporter(WantToMeasure wtm) { gWantToMeasure = wtm; }
 
 // Expose templated functions for tracing
