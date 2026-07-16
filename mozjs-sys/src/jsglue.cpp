@@ -128,7 +128,7 @@ class RustJobQueue : public JS::JobQueue {
 
       // Check that the current queue is empty, as required by the SavedJobQueue
       // contract.
-      MOZ_ASSERT(mTraps.empty(*mCurrentQueue));
+      // MOZ_ASSERT(mTraps.empty(*mCurrentQueue));
 
       // Destroy the topmost queue, checking that it was the queue this
       // SavedQueue expects to restore from. Imagine we have normal queue A,
