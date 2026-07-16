@@ -11,6 +11,19 @@ index 27a59188f..1396c9086 100644
  
  #include "mozilla/intl/ICU4CGlue.h"
  #include "mozilla/intl/ICUError.h"
+diff --git a/intl/components/src/Bidi.h b/intl/components/src/Bidi.h
+index 8db74173e..2e8ffa317 100644
+--- a/intl/components/src/Bidi.h
++++ b/intl/components/src/Bidi.h
+@@ -13,7 +13,7 @@
+ #define USE_RUST_UNICODE_BIDI 1
+ 
+ #if USE_RUST_UNICODE_BIDI
+-#  include "mozilla/intl/unicode_bidi_ffi_generated.h"
++#  include "unicode_bidi_ffi_generated.h"
+ #else
+ struct UBiDi;
+ #endif
 diff --git a/js/src/builtin/String.cpp b/js/src/builtin/String.cpp
 index 150c0f65f..77d57a3e5 100644
 --- a/js/src/builtin/String.cpp
@@ -38,30 +51,20 @@ index bd1a1e37b..453921951 100644
  #include "builtin/intl/LocaleNegotiation.h"
  #include "builtin/intl/ParameterNegotiation.h"
 diff --git a/js/src/irregexp/imported/regexp-parser.cc b/js/src/irregexp/imported/regexp-parser.cc
-index 3926339e9..f8123bd7d 100644
+index 3926339e9..6df564ece 100644
 --- a/js/src/irregexp/imported/regexp-parser.cc
 +++ b/js/src/irregexp/imported/regexp-parser.cc
-@@ -10,12 +10,12 @@
+@@ -10,7 +10,7 @@
  #include "irregexp/imported/regexp.h"
  
  #ifdef V8_INTL_SUPPORT
 -#include "js/properties_glue.h"
--#include "unicode/uniset.h"
--#include "unicode/unistr.h"
--#include "unicode/usetiter.h"
--#include "unicode/utf16.h"  // For U16_NEXT
--#endif                      // V8_INTL_SUPPORT
-+#  include "properties_glue.h"
-+#  include "unicode/uniset.h"
-+#  include "unicode/unistr.h"
-+#  include "unicode/usetiter.h"
-+#  include "unicode/utf16.h"  // For U16_NEXT
-+#endif                        // V8_INTL_SUPPORT
- 
- namespace v8 {
- namespace internal {
++#include "properties_glue.h"
+ #include "unicode/uniset.h"
+ #include "unicode/unistr.h"
+ #include "unicode/usetiter.h"
 diff --git a/js/src/moz.build b/js/src/moz.build
-index 3e2280403..2e0ab1d02 100755
+index 0a62964f3..2e0ab1d02 100755
 --- a/js/src/moz.build
 +++ b/js/src/moz.build
 @@ -309,7 +309,6 @@ DIRS += [
@@ -82,3 +85,11 @@ index 3e2280403..2e0ab1d02 100755
      ]
  
  CXXFLAGS += CONFIG["MOZ_ZLIB_CFLAGS"]
+@@ -367,7 +363,6 @@ GeneratedFile(
+ if CONFIG["JS_HAS_INTL_API"]:
+     if CONFIG["JS_STANDALONE"]:
+         DIRS += [
+-            "../../intl/bidi",
+             "../../intl/components",
+         ]
+ 

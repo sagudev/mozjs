@@ -363,7 +363,6 @@ GeneratedFile(
 if CONFIG["JS_HAS_INTL_API"]:
     if CONFIG["JS_STANDALONE"]:
         DIRS += [
-            "../../intl/bidi",
             "../../intl/components",
         ]
 
