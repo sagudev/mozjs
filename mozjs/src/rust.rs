@@ -1569,6 +1569,10 @@ pub mod wrappers {
     };
     use crate::jsapi::{MallocSizeOf, ObjectOpResult, ObjectPrivateVisitor, TabSizes};
     use crate::jsapi::{SavedFrameResult, SavedFrameSelfHosted};
+    use crate::jsapi::LoadModuleResolvedCallback;
+    use crate::jsapi::LoadModuleRejectedCallback;
+    use crate::jsapi::CollectDelazificationsResult;
+    use crate::jsapi::BorrowedErrorReport;
     include!("jsapi_wrappers.in.rs");
     include!("glue_wrappers.in.rs");
 }
