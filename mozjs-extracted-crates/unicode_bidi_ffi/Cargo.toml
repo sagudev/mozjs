@@ -1,6 +1,6 @@
 [package]
 links = "unicode-bidi-ffi"
-name = "mozjs-unicode-bidi-ffi"
+name = "mozjs_unicode_bidi_ffi"
 version = "153.0.0"
 license = "MPL-2.0"
 authors = ["Jonathan Kew <jkew@mozilla.com>"]

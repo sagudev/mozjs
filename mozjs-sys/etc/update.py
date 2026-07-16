@@ -68,17 +68,19 @@ def extract_tarball(tarball, commit):
         assert milestone_version is not None, "Could not find milestone version!"
 
         PATCHED_CRATES = {
-            "icu_collator": "mozjs-icu_collator",
-            "icu_collator_data": "mozjs-icu_collator_data",
-            "icu_normalizer": "mozjs-icu_normalizer",
-            "icu_normalizer_data": "mozjs-icu_normalizer_data",
-            "icu_collections": "mozjs-icu_collections",
-            "utf8_iter": "mozjs-utf8_iter",
-            "utf16_iter": "mozjs-utf16_iter",
+            "icu_collator": "mozjs_icu_collator",
+            "icu_collator_data": "mozjs_icu_collator_data",
+            "icu_normalizer": "mozjs_icu_normalizer",
+            "icu_normalizer_data": "mozjs_icu_normalizer_data",
+            "icu_collections": "mozjs_icu_collections",
+            "utf8_iter": "mozjs_utf8_iter",
+            "utf16_iter": "mozjs_utf16_iter",
         }
 
         def extract_rust_crate(subfolder: str, crate_name: str, cbindgen=True):
-            extracted_crate_path = os.path.join("mozjs-extracted-crates", crate_name)
+            extracted_crate_path = os.path.join(
+                "mozjs-extracted-crates", crate_name.replace("-", "_")
+            )
             shutil.copytree(
                 os.path.join(directory, subdirectory, subfolder, crate_name),
                 extracted_crate_path,
@@ -87,8 +89,13 @@ def extract_tarball(tarball, commit):
                 os.remove(os.path.join(extracted_crate_path, "moz.build"))
 
             cargo_toml = Path(os.path.join(extracted_crate_path, "Cargo.toml"))
-            cargo_toml_contents = cargo_toml.read_text().replace(
-                'name = "', 'name = "mozjs-', count=1
+            cargo_toml_contents = cargo_toml.read_text()
+            cargo_toml_contents = re.sub(
+                r'^name = ".*"',
+                f'name = "mozjs_{crate_name.replace("-", "_")}"',
+                cargo_toml_contents,
+                flags=re.MULTILINE,
+                count=1,
             )
             cargo_toml_contents = re.sub(
                 r'^version = ".*"',
@@ -190,7 +197,7 @@ impl icu_casemap::ClosureSink for CodePointInversionListBuilder {
     println!("cargo:include={{}}", include_dir.to_str().unwrap());
     cbindgen::generate(".")
         .expect("Unable to generate bindings")
-        .write_to_file(include_dir.join("{crate_name + ("_generated" if crate_name == "unicode-bidi-ffi" else "")}.h"));
+        .write_to_file(include_dir.join("{crate_name.replace("-", "_") + ("_generated" if crate_name == "unicode-bidi-ffi" else "")}.h"));
 }}
 """
                 )

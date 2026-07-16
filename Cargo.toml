@@ -1,11 +1,5 @@
 [workspace]
-members = [
-    "mozjs-extracted-crates/locale_glue",
-    "mozjs-extracted-crates/properties_glue",
-    "mozjs-extracted-crates/unicode-bidi-ffi",
-    "mozjs-sys",
-    "mozjs",
-]
+members = ["mozjs-sys", "mozjs"]
 resolver = "2"
 
 [workspace.package]

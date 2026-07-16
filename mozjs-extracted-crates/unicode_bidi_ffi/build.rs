@@ -5,5 +5,5 @@ fn main() {
     println!("cargo:include={}", include_dir.to_str().unwrap());
     cbindgen::generate(".")
         .expect("Unable to generate bindings")
-        .write_to_file(include_dir.join("unicode-bidi-ffi_generated.h"));
+        .write_to_file(include_dir.join("unicode_bidi_ffi_generated.h"));
 }
