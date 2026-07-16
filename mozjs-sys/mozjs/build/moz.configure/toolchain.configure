@@ -1791,7 +1791,7 @@ def select_linker_tmpl(host_or_target):
             # ensure consistent output.
             env["LC_ALL"] = "C"
             retcode, stdout, stderr = get_cmd_output(*cmd, env=env)
-            if retcode == 1 and ("Logging ld64 options" in stderr or "PROGRAM:ld  PROJECT:dyld" in stderr or "PROGRAM:ld  PROJECT:ld" in stderr):
+            if retcode == 1 and ("Logging ld64 options" in stderr or "PROGRAM:ld  PROJECT:dyld" in stderr or "PROGRAM:ld PROJECT:ld" in stderr):
                 kind = "ld64"
 
             elif retcode != 0:
