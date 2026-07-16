@@ -11,7 +11,7 @@
 extern crate encoding_c;
 extern crate encoding_c_mem;
 
-extern crate normalizer_glue;
+extern crate mozjs_normalizer_glue;
 
 #[cfg(feature = "intl")]
 extern crate icu_capi;
