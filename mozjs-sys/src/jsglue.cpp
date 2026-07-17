@@ -1319,4 +1319,46 @@ JSString* const* StackGCVectorStringAtIndex(
   return vec.begin() + index;
 }
 
+// Copy own properties (including private fields) from |obj| to |target|.
+// |obj| and |target| may be in different compartments.
+bool CopyExpandoProperties(JSContext* cx, JS::HandleObject target,
+                           JS::HandleObject obj) {
+  // |obj| and |target| must not be CCWs because we need to enter their realms
+  // below and CCWs are not associated with a single realm.
+  MOZ_ASSERT(!IsCrossCompartmentWrapper(obj));
+  MOZ_ASSERT(!IsCrossCompartmentWrapper(target));
+
+  JSAutoRealm ar(cx, obj);
+
+  JS::RootedIdVector props(cx);
+  if (!GetPropertyKeys(
+          cx, obj,
+          JSITER_PRIVATE | JSITER_OWNONLY | JSITER_HIDDEN | JSITER_SYMBOLS,
+          &props)) {
+    return false;
+  }
+
+  for (size_t i = 0; i < props.length(); ++i) {
+    JS::RootedId id(cx, props[i]);
+    JS::Rooted<mozilla::Maybe<JS::PropertyDescriptor>> desc(cx);
+    if (!JS_GetOwnPropertyDescriptorById(cx, obj, id, &desc)) {
+      return false;
+    }
+    MOZ_ASSERT(desc.isSome());
+
+    JSAutoRealm dstRealm(cx, target);
+    JS_MarkCrossZoneId(cx, id);
+    JS::RootedId wrappedId(cx, id);
+    if (!JS_WrapPropertyDescriptor(cx, &desc)) {
+      return false;
+    }
+    JS::Rooted<JS::PropertyDescriptor> desc_(cx, *desc);
+    if (!JS_DefinePropertyById(cx, target, wrappedId, desc_)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 }  // extern "C"
