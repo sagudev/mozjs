@@ -167,6 +167,9 @@ wrap!(jsapi: pub fn StartCollectingDelazifications1(cx: *mut JSContext, module: 
 wrap!(jsapi: pub fn FinishCollectingDelazifications(cx: *mut JSContext, script: Handle<*mut JSScript>, stencilOut: *mut *mut Stencil) -> bool);
 wrap!(jsapi: pub fn FinishCollectingDelazifications1(cx: *mut JSContext, module: HandleObject, stencilOut: *mut *mut Stencil) -> bool);
 wrap!(jsapi: pub fn GetScriptSourceText(cx: *mut JSContext, stencil: *mut Stencil, result: MutableHandle<Value>) -> bool);
+wrap!(jsapi: pub fn RunJSMicroTask(cx: *mut JSContext, entry: Handle<*mut JSMicroTask>) -> bool);
+wrap!(jsapi: pub fn MaybeGetHostDefinedDataFromJSMicroTask(entry: *mut JSMicroTask, incumbentGlobal: MutableHandleObject, optionalHostDefinedData: MutableHandleObject) -> bool);
+wrap!(jsapi: pub fn MaybeGetAllocationSiteFromJSMicroTask(entry: *mut JSMicroTask, out: MutableHandleObject) -> bool);
 wrap!(jsapi: pub fn ForceLexicalInitialization(cx: *mut JSContext, obj: HandleObject) -> bool);
 wrap!(jsapi: pub fn JS_CallFunctionValue(cx: *mut JSContext, obj: HandleObject, fval: Handle<Value>, args: *const HandleValueArray, rval: MutableHandle<Value>) -> bool);
 wrap!(jsapi: pub fn JS_CallFunction(cx: *mut JSContext, obj: HandleObject, fun: Handle<*mut JSFunction>, args: *const HandleValueArray, rval: MutableHandle<Value>) -> bool);

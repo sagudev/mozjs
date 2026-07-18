@@ -33,6 +33,7 @@
 #include "js/experimental/TypedData.h"
 #include "js/friend/DumpFunctions.h"
 #include "js/friend/ErrorMessages.h"
+#include "js/friend/MicroTask.h"
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "mozilla/PodOperations.h"
@@ -52,29 +53,15 @@ struct JobQueueTraps {
   void (*runJobs)(const void* queue, JSContext* cx);
   void (*traceNonGCThingMicroTask)(const void* queue, JSTracer* trc,
                                    JS::Value* valuePtr);
-
-  // Create a new queue, push it onto an embedder-side stack, and return the new
-  // queue.
-  const void* (*pushNewInterruptQueue)(void* aInterruptQueues);
-  // Destroy the queue most recently created by pushNewInterruptQueue(),
-  // returning its address so we can check if we are restoring the saved queue
-  // over the correct queue.
-  const void* (*popInterruptQueue)(void* aInterruptQueues);
-  // Destroy the embedder-side stack of interrupt queues.
-  void (*dropInterruptQueues)(void* aInterruptQueues);
 };
 
 class RustJobQueue : public JS::JobQueue {
   JobQueueTraps mTraps;
   const void* mQueue;
-  void* mInterruptQueues;
 
  public:
-  RustJobQueue(const JobQueueTraps& aTraps, const void* aQueue,
-               void* aInterruptQueues)
-      : mTraps(aTraps), mQueue(aQueue), mInterruptQueues(aInterruptQueues) {}
-
-  ~RustJobQueue() { mTraps.dropInterruptQueues(mInterruptQueues); }
+  RustJobQueue(const JobQueueTraps& aTraps, const void* aQueue)
+      : mTraps(aTraps), mQueue(aQueue) {}
 
   virtual bool getHostDefinedData(
       JSContext* cx, JS::MutableHandle<JSObject*> incumbentGlobal,
@@ -98,72 +85,26 @@ class RustJobQueue : public JS::JobQueue {
  private:
   class SavedQueue : public JS::JobQueue::SavedJobQueue {
    public:
-    SavedQueue(const JobQueueTraps& aTraps, void* aInterruptQueues,
-               const void** aCurrentQueue, const void* aNewQueue)
-        : mTraps(aTraps),
-          mInterruptQueues(aInterruptQueues),
-          mCurrentQueue(aCurrentQueue),
-          mNewQueue(aNewQueue),
-          mSavedQueue(*aCurrentQueue) {
-      // TODO: assert that the context’s jobQueue hasn’t been cleared with
-      // SetJobQueue(nullptr) or DestroyContext(). Don’t know how to do this
-      // with only an opaque JSContext decl. Are we allowed to #include
-      // "vm/JSContext.h"?
-      //
-      // MOZ_ASSERT(cx->jobQueue.ref());
-
-      // Set the current queue to mNewQueue.
-      // We need to take care of this, so that we can save the old queue in the
-      // member initializers above.
-      *mCurrentQueue = mNewQueue;
+    explicit SavedQueue(const JobQueueTraps& aTraps, JSContext* cx)
+        : mTraps(aTraps), cx(cx) {
+      mSavedQueue = JS::SaveMicroTaskQueue(cx);
     }
 
     ~SavedQueue() {
-      // TODO: assert that the context’s jobQueue hasn’t been cleared with
-      // SetJobQueue(nullptr) or DestroyContext(). Don’t know how to do this
-      // with only an opaque JSContext decl. Are we allowed to #include
-      // "vm/JSContext.h"?
-      //
-      // MOZ_ASSERT(cx->jobQueue.ref());
-
-      // Check that the current queue is empty, as required by the SavedJobQueue
-      // contract.
-      // MOZ_ASSERT(mTraps.empty(*mCurrentQueue));
-
-      // Destroy the topmost queue, checking that it was the queue this
-      // SavedQueue expects to restore from. Imagine we have normal queue A,
-      // then we switch to B (SavedQueue from B to A), then we switch to C
-      // (SavedQueue from C to B). If the SavedQueue from B to A is restored
-      // before the SavedQueue from C to B, the embedder will destroy both C and
-      // B, but in the end, the queue will be set to B, a freed queue.
-      MOZ_ASSERT(mTraps.popInterruptQueue(mInterruptQueues) == mNewQueue);
-
-      *mCurrentQueue = mSavedQueue;
+      MOZ_ASSERT(JS::GetRegularMicroTaskCount(cx) == 0);
+      JS::RestoreMicroTaskQueue(cx, std::move(mSavedQueue));
     }
 
    private:
     // Required for embedder FFI.
     JobQueueTraps mTraps;
-    void* mInterruptQueues;
-
-    // Pointer to the RustJobQueue::mQueue field to write to when switching.
-    const void** mCurrentQueue;
-
-    // The queue to switch to when saving.
-    const void* mNewQueue;
-
-    // The queue to switch to when restoring.
-    const void* mSavedQueue;
+    JSContext* cx;
+    js::UniquePtr<JS::SavedMicroTaskQueue> mSavedQueue;
   };
 
   virtual js::UniquePtr<SavedJobQueue> saveJobQueue(JSContext* cx) override {
-    auto newQueue = mTraps.pushNewInterruptQueue(mInterruptQueues);
-    // Servo uses infallible allocation here, so it should never return nullptr.
-    MOZ_ASSERT(!!newQueue);
-
-    auto result =
-        js::MakeUnique<SavedQueue>(mTraps, mInterruptQueues, &mQueue, newQueue);
-    if (!result) {
+    auto saved = js::MakeUnique<SavedQueue>(mTraps, cx);
+    if (!saved) {
       // “On OOM, this should call JS_ReportOutOfMemory on the given JSContext,
       // and return a null UniquePtr.”
       //
@@ -172,7 +113,7 @@ class RustJobQueue : public JS::JobQueue {
       js::ReportOutOfMemory(cx);
       return nullptr;
     }
-    return result;
+    return saved;
   }
 };
 
@@ -1153,9 +1094,8 @@ JSString* JS_ForgetStringLinearness(JSLinearString* str) {
   return JS_FORGET_STRING_LINEARNESS(str);
 }
 
-JS::JobQueue* CreateJobQueue(const JobQueueTraps* aTraps, const void* aQueue,
-                             void* aInterruptQueues) {
-  return new RustJobQueue(*aTraps, aQueue, aInterruptQueues);
+JS::JobQueue* CreateJobQueue(const JobQueueTraps* aTraps, const void* aQueue) {
+  return new RustJobQueue(*aTraps, aQueue);
 }
 
 void DeleteJobQueue(JS::JobQueue* queue) { delete queue; }
