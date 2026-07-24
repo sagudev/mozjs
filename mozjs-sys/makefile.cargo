@@ -119,6 +119,8 @@ ifneq ($(HOST),$(TARGET))
         ifneq (debug,$(PROFILE))
             CONFIGURE_FLAGS += --lto=thin
         endif
+
+		TARGET = wasm32-unknown-wasi
     endif
 
 	ifeq (android,$(findstring android,$(TARGET)))
