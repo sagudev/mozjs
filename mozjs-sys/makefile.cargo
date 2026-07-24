@@ -107,6 +107,7 @@ ifneq ($(HOST),$(TARGET))
         HOST_CXX = clang++
         CONFIGURE_FLAGS += \
             --enable-portable-baseline-interp \
+			--disable-stdcxx-compat \
             --disable-clang-plugin \
             --disable-jit \
             --disable-shared-memory \
