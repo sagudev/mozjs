@@ -1,0 +1,70 @@
+From ad168c79ad901c658d47478e569d7854ad376472 Mon Sep 17 00:00:00 2001
+From: sagudev <16504129+sagudev@users.noreply.github.com>
+Date: Sat, 14 Nov 2026 08:54:53 +0100
+Subject: [PATCH] Add MarkCrossZoneId and MarkCrossZoneIdValue shims
+
+we do not actually need them in servo, but this will allow us to avoid braking changes when doing security bump
+
+Signed-off-by: sagudev <16504129+sagudev@users.noreply.github.com>
+---
+ mozjs-sys/mozjs/js/public/Zone.h | 15 +++++++++++++++
+ mozjs-sys/mozjs/js/src/jsapi.cpp | 19 +++++++++++++++++++
+ 2 files changed, 34 insertions(+)
+
+diff --git a/mozjs-sys/mozjs/js/public/Zone.h b/mozjs-sys/mozjs/js/public/Zone.h
+index 19eb13d19..e7e521109 100644
+--- a/mozjs-sys/mozjs/js/public/Zone.h
++++ b/mozjs-sys/mozjs/js/public/Zone.h
+@@ -66,4 +66,19 @@ extern JS_PUBLIC_API void* JS_GetZoneUserData(JS::Zone* zone);
+ extern JS_PUBLIC_API bool JS_RefreshCrossCompartmentWrappers(
+     JSContext* cx, JS::Handle<JSObject*> obj);
+ 
++/**
++ * Mark a jsid after entering a new compartment. Different zones separately
++ * mark the ids in a runtime, and this must be used any time an id is obtained
++ * from one compartment and then used in another compartment, unless the two
++ * compartments are guaranteed to be in the same zone.
++ */
++JS_PUBLIC_API void JS_MarkCrossZoneId(JSContext* cx, jsid id);
++
++/**
++ * If value stores a jsid (an atomized string or symbol), mark that id as for
++ * JS_MarkCrossZoneId.
++ */
++JS_PUBLIC_API void JS_MarkCrossZoneIdValue(JSContext* cx,
++                                                  const JS::Value& value);
++
+ #endif  // js_Zone_h
+diff --git a/mozjs-sys/mozjs/js/src/jsapi.cpp b/mozjs-sys/mozjs/js/src/jsapi.cpp
+index d5d168b0c..a01564e9e 100644
+--- a/mozjs-sys/mozjs/js/src/jsapi.cpp
++++ b/mozjs-sys/mozjs/js/src/jsapi.cpp
+@@ -553,6 +553,25 @@ JS_PUBLIC_API void* JS_GetCompartmentPrivate(JS::Compartment* compartment) {
+   return compartment->data;
+ }
+ 
++JS_PUBLIC_API void JS_MarkCrossZoneId(JSContext* cx, jsid id) {
++  RootedId idCopy(cx, id);
++  MOZ_RELEASE_ASSERT(JS_WrapId(cx, &idCopy));
++  MOZ_RELEASE_ASSERT(idCopy == id);
++}
++
++JS_PUBLIC_API void JS_MarkCrossZoneIdValue(JSContext* cx, const Value& value) {
++  RootedValue valueCopy(cx, value);
++  MOZ_RELEASE_ASSERT(JS_WrapIdValue(cx, &valueCopy));
++  MOZ_RELEASE_ASSERT(valueCopy == value);
++}
++
++bool JS_WrapIdValue(JSContext* cx, MutableHandleValue value) {
++  AssertHeapIsIdle();
++  CHECK_THREAD(cx);
++  MOZ_ASSERT(value.isString() || value.isSymbol());
++  return cx->wrapOrRecordRefToValue(value);
++}
++
+ JS_PUBLIC_API bool JS_WrapId(JSContext* cx, MutableHandleId id) {
+   AssertHeapIsIdle();
+   CHECK_THREAD(cx);
+-- 
+2.53.0
+
